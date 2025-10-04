@@ -1,24 +1,23 @@
-from __future__ import annotations
-from dataclasses import dataclass
-from typing import Any
+from dataclasses import dataclass, field
+from typing import List, Optional, Dict, Any
 
-@dataclass(frozen=True)
+@dataclass
 class Issue:
     kind: str
     message: str
     severity: str
-    cwe: str | None
-    function: str | None
-    node_id: str | None  # CFG node id for highlighting
-    evidence: dict[str, Any]
+    cwe: str
+    function: str
+    node_id: Optional[str] = None
+    evidence: Dict[str, Any] = field(default_factory=dict)
 
 @dataclass
 class FindingSet:
-    issues: list[Issue]
+    issues: List[Issue] = field(default_factory=list)
 
-    def add(self, issue: Issue):
+    def add(self, issue: Issue) -> None:
         self.issues.append(issue)
 
-    def by_severity(self):
+    def by_severity(self) -> List[Issue]:
         order = {"High":0, "Medium":1, "Low":2}
-        return sorted(self.issues, key=lambda x: order.get(x.severity, 3))
+        return sorted(self.issues, key=lambda x: order.get((x.severity or "Medium"), 1))

@@ -1,88 +1,60 @@
 from __future__ import annotations
-from typing import Dict, Set
-from dataclasses import dataclass
-from .cfg import CFG
-from .ir import IRStmt
+from dataclasses import dataclass, field
+from typing import Dict, Set, Iterable
+
+# --- Dataflow facts (very small / demo-friendly) -----------------------------------
 
 @dataclass
 class Facts:
-    defined_in: Dict[str, Set[str]]  # block id -> vars definitely defined on entry
-    taint_in: Dict[str, Set[str]]    # block id -> tainted vars on entry
-    intervals: Dict[str, Dict[str, tuple[int|None,int|None]]]  # block -> var -> (lo,hi)
+    """
+    Minimal dataflow container used by rules.py.
+    - defined_in[block_id] = set of vars defined before/within the block (very coarse).
+    - taint_in[block_id]   = set of vars considered tainted at block entry (optional).
+    """
+    defined_in: Dict[str, Set[str]] = field(default_factory=dict)
+    taint_in: Dict[str, Set[str]] = field(default_factory=dict)
 
+# --- IR read-extraction helper -----------------------------------------------------
 
-def _reads(stmt: IRStmt) -> Set[str]:
-    txt = ""  # crude parse: collect identifiers tokens used on RHS
-    if stmt.op == "assign":
-        txt = stmt.args.get("rhs", "")
-    elif stmt.op == "call":
-        txt = ",".join(stmt.args.get("args", []))
-    elif stmt.op == "return":
-        txt = stmt.args.get("expr", "")
-    elif stmt.op in ("if", "loop"):
-        txt = stmt.args.get("cond", "")
+def _reads(stmt) -> Iterable[str]:
+    """
+    Best-effort extraction of variable names read by an IR statement.
+    Works with simple IRs used in this project (stmt.op + stmt.args dict).
+    Falls back to scanning strings present in stmt.args.
+    """
     out: Set[str] = set()
-    for tok in txt.replace("[", " ").replace("]", " ").replace("(", " ").replace(")", " ").replace(","," ").replace("*"," ").split():
-        if tok and tok[0].isalpha():
-            out.add(tok)
+    try:
+        # expected layout: stmt.op (str) and stmt.args (dict)
+        args = getattr(stmt, "args", {}) or {}
+        def _scan_val(v):
+            if v is None:
+                return
+            if isinstance(v, str):
+                # crude tokenization
+                for tok in v.replace("->", " ").replace("*", " ").replace("(", " ").replace(")", " ").replace(",", " ").split():
+                    # ignore obvious operators/ints
+                    if tok.isdigit():
+                        continue
+                    if tok in {"=", "+", "-", "/", "*", "%", "==", "!=", "<", "<=", ">", ">=", "&&", "||"}:
+                        continue
+                    out.add(tok)
+            elif isinstance(v, (list, tuple)):
+                for x in v:
+                    _scan_val(x)
+            elif isinstance(v, dict):
+                for x in v.values():
+                    _scan_val(x)
+
+        for v in args.values():
+            _scan_val(v)
+
+        # Some IRs store a direct 'reads' field
+        r = args.get("reads")
+        if isinstance(r, (list, set, tuple)):
+            for x in r:
+                if isinstance(x, str):
+                    out.add(x)
+
+    except Exception:
+        pass
     return out
-
-
-def _writes(stmt: IRStmt) -> Set[str]:
-    if stmt.op == "assign":
-        lhs = stmt.args.get("lhs", "")
-        # treat a[i] as a write to a
-        return {lhs.split("[")[0]}
-    return set()
-
-
-def run_all_analyses(cfgs: Dict[str, CFG]) -> Dict[str, Facts]:
-    facts: Dict[str, Facts] = {}
-    for fname, cfg in cfgs.items():
-        facts[fname] = _analyze_function(cfg)
-    return facts
-
-
-def _analyze_function(cfg: CFG) -> Facts:
-    defined_in: Dict[str, Set[str]] = {bid: set() for bid in cfg.blocks}
-    taint_in: Dict[str, Set[str]] = {bid: set() for bid in cfg.blocks}
-    intervals: Dict[str, Dict[str, tuple[int|None,int|None]]] = {bid: {} for bid in cfg.blocks}
-
-    changed = True
-    while changed:
-        changed = False
-        for bid, block in cfg.blocks.items():
-            # IN sets are union of predecessors' OUT
-            preds = block.pred
-            in_def = set().union(*(defined_in[p] for p in preds)) if preds else set()
-            in_taint = set().union(*(taint_in[p] for p in preds)) if preds else set()
-
-            cur_def = set(in_def)
-            cur_taint = set(in_taint)
-
-            # very light interval: none for now (kept for UI completeness)
-            intervals[bid] = intervals.get(bid, {})
-
-            for s in block.stmts:
-                # taint sources
-                if s.op == "call" and s.args.get("func") in {"gets","fgets","scanf"}:
-                    # mark args as tainted sinks won't be here; args 1+ are outputs
-                    # Simple rule: any identifier appearing is tainted
-                    for v in _reads(s):
-                        cur_taint.add(v)
-                # reads may report uninitialized elsewhere
-                for w in _writes(s):
-                    cur_def.add(w)
-                # taint propagation: assignment copies taint
-                if s.op == "assign":
-                    lhs = s.args.get("lhs", "").split("[")[0]
-                    rhs_ids = _reads(s)
-                    if any(r in cur_taint for r in rhs_ids):
-                        cur_taint.add(lhs)
-
-            if cur_def != defined_in[bid] or cur_taint != taint_in[bid]:
-                defined_in[bid] = cur_def
-                taint_in[bid] = cur_taint
-                changed = True
-
-    return Facts(defined_in=defined_in, taint_in=taint_in, intervals=intervals)

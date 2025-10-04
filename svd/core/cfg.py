@@ -16,8 +16,6 @@ class CFG:
     blocks: Dict[str, BasicBlock]
     entry: str
 
-# ---------------- CFG construction (structured, simple) ----------------
-
 def build_cfg(func: IRFunction) -> CFG:
     blocks: Dict[str, BasicBlock] = {}
     counter = 0
@@ -52,64 +50,42 @@ def build_cfg(func: IRFunction) -> CFG:
         elif op in ("endif", "endloop"):
             kind, start_bb, else_bb = stack.pop()
             join = new_block()
-            current.succ.append(join.id)
-            join.pred.append(current.id)
+            current.succ.append(join.id); join.pred.append(current.id)
             if else_bb:
-                else_bb.succ.append(join.id)
-                join.pred.append(else_bb.id)
+                else_bb.succ.append(join.id); join.pred.append(else_bb.id)
             else:
-                start_bb.succ.append(join.id)
-                join.pred.append(start_bb.id)
+                start_bb.succ.append(join.id); join.pred.append(start_bb.id)
             current = join
         else:
             current.stmts.append(s)
 
-    entry = "B1"
-    return CFG(func=func, blocks=blocks, entry=entry)
+    return CFG(func=func, blocks=blocks, entry="B1")
 
 def build_cfgs_for_unit(unit: IRUnit) -> Dict[str, CFG]:
     return {f.name: build_cfg(f) for f in unit.functions}
 
-# ---------------- Human-readable stmt lines & details ----------------
-
 def _stmt_line(s: IRStmt) -> str:
-    op = getattr(s, "op", "")
-    sid = getattr(s, "sid", "")
-    args = getattr(s, "args", {}) or {}
-    if op == "assign":
-        return f"{sid}: {args.get('lhs','')} = {args.get('rhs','')}"
-    if op == "call":
-        fn = args.get("func", "")
-        argv = args.get("args", [])
-        return f"{sid}: call {fn}({', '.join(argv)})"
-    if op == "return":
-        return f"{sid}: return {args.get('expr','')}"
-    if op == "if":
-        return f"{sid}: if ({args.get('cond','')})"
-    if op == "else":
-        return f"{sid}: else"
-    if op == "endif":
-        return f"{sid}: endif"
-    if op == "loop":
-        return f"{sid}: loop ({args.get('cond','')})"
-    if op == "endloop":
-        return f"{sid}: endloop"
+    op, sid, args = getattr(s, "op", ""), getattr(s, "sid", ""), getattr(s, "args", {}) or {}
+    if op == "assign":  return f"{sid}: {args.get('lhs','')} = {args.get('rhs','')}"
+    if op == "call":    return f"{sid}: call {args.get('func','')}({', '.join(args.get('args', []))})"
+    if op == "return":  return f"{sid}: return {args.get('expr','')}"
+    if op == "if":      return f"{sid}: if ({args.get('cond','')})"
+    if op == "else":    return f"{sid}: else"
+    if op == "endif":   return f"{sid}: endif"
+    if op == "loop":    return f"{sid}: loop ({args.get('cond','')})"
+    if op == "endloop": return f"{sid}: endloop"
     return f"{sid}: {op}"
 
 def cfg_block_details(cfg: CFG) -> List[Tuple[str, List[str]]]:
-    details: List[Tuple[str, List[str]]] = []
-    for bid, b in cfg.blocks.items():
-        details.append((bid, [_stmt_line(s) for s in b.stmts]))
-    details.sort(key=lambda x: int(x[0][1:]) if x[0].startswith('B') else 0)
+    details = [(bid, [_stmt_line(s) for s in b.stmts]) for bid, b in cfg.blocks.items()]
+    details.sort(key=lambda x: int(x[0][1:]) if x[0].startswith("B") else 0)
     return details
 
-# ---------------- Mermaid output (bulletproof) ----------------
-# Nodes only show the block id (B1, B2, ...) to avoid parser gotchas.
-
 def cfg_to_mermaid(cfg: CFG) -> str:
+    # Minimal, stable Mermaid that never disappears on tab switches
     lines = ["flowchart TD"]
     for bid in cfg.blocks.keys():
-        lines.append(f'{bid}["{bid}"]')   # rectangle node with simple id label
+        lines.append(f'{bid}["{bid}"]')
     for bid, b in cfg.blocks.items():
         for t in b.succ:
             lines.append(f"{bid} --> {t}")

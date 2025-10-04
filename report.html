@@ -1,22 +1,20 @@
 <!doctype html>
 <html>
 <head>
-  <meta charset='utf-8'/>
-  <meta name='viewport' content='width=device-width, initial-scale=1' />
-  <title>Static Vulnerability Detector — svd/examples/buggy.c</title>
+  <meta charset='utf-8'/><meta name='viewport' content='width=device-width, initial-scale=1' />
+  <title>Static Vulnerability Detector — svd\examples\buggy.c</title>
   <link rel='stylesheet' href='https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css'/>
   <style>
-    body { background: #0f172a; }
+    body { background:#0f172a; }
     .card { background:#111827; color:#e5e7eb; }
     .panel.hidden { display:none; }
     .table-wrap { overflow:auto; }
     code { white-space: pre; }
-    /* Tabs */
-    .tab-btn {
-      padding:.375rem .75rem; border-radius:.5rem; margin-right:.5rem;
-      background:#e5e7eb; color:#111827; transition: background .15s, color .15s;
-    }
+    .tab-btn { padding:.375rem .75rem; border-radius:.5rem; margin-right:.5rem; background:#e5e7eb; color:#111827; transition: background .15s, color .15s; }
     .tab-btn:hover, .tab-btn.is-active { background:#4f46e5; color:#fff; }
+    .code-line { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New", monospace; }
+    .line-no { display:inline-block; width:3rem; color:#9ca3af; text-decoration:none; }
+    mark { background:#b91c1c; color:#fff; }
   </style>
 </head>
 <body class='min-h-screen'>
@@ -24,68 +22,47 @@
 
     <header class='flex items-center justify-between flex-wrap gap-3'>
       <h1 class='text-2xl font-bold text-white'>Static Vulnerability Detector</h1>
-      <div class='text-gray-300 text-sm'>svd/examples/buggy.c</div>
+      <div class='text-gray-300 text-sm'>svd\examples\buggy.c</div>
     </header>
 
-    <section class='grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3'>
-      
-    <div class='card rounded-xl p-3 text-center'>
-      <div class='text-xs text-gray-400'>LOC</div>
-      <div class='text-xl font-semibold'>17</div>
-    </div>
-    
-      
-    <div class='card rounded-xl p-3 text-center'>
-      <div class='text-xs text-gray-400'>Functions</div>
-      <div class='text-xl font-semibold'>2</div>
-    </div>
-    
-      
-    <div class='card rounded-xl p-3 text-center'>
-      <div class='text-xs text-gray-400'>CFG Nodes</div>
-      <div class='text-xl font-semibold'>4</div>
-    </div>
-    
-      
-    <div class='card rounded-xl p-3 text-center'>
-      <div class='text-xs text-gray-400'>CFG Edges</div>
-      <div class='text-xl font-semibold'>3</div>
-    </div>
-    
-      
-    <div class='card rounded-xl p-3 text-center'>
-      <div class='text-xs text-gray-400'>Issues</div>
-      <div class='text-xl font-semibold'>8</div>
-    </div>
-    
-      
-    <div class='card rounded-xl p-3 text-center'>
-      <div class='text-xs text-gray-400'>Time (ms)</div>
-      <div class='text-xl font-semibold'>19</div>
-    </div>
-    
+    <!-- Export buttons: work in server mode (POST) and in file:// mode (JS fallback) -->
+    <section class='flex items-center gap-2'>
+      <form id='export-json-form' method='post' action='/export/json' target='_blank' style='display:none'>
+        <input type='hidden' name='data' value=''/>
+      </form>
+      <form id='export-pdf-form' method='post' action='/export/pdf' target='_blank' style='display:none'>
+        <input type='hidden' name='data' value=''/>
+      </form>
+      <button id='btn-json' class='px-3 py-2 rounded bg-gray-700 text-white text-sm'>Export JSON</button>
+      <button id='btn-pdf'  class='px-3 py-2 rounded bg-gray-700 text-white text-sm'>Export PDF</button>
     </section>
 
+    <!-- Metrics -->
+    <section class='grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3'>
+      <div class='card rounded-xl p-3 text-center'><div class='text-xs text-gray-400'>LOC</div><div class='text-xl font-semibold'>17</div></div>
+      <div class='card rounded-xl p-3 text-center'><div class='text-xs text-gray-400'>Functions</div><div class='text-xl font-semibold'>2</div></div>
+      <div class='card rounded-xl p-3 text-center'><div class='text-xs text-gray-400'>CFG Nodes</div><div class='text-xl font-semibold'>4</div></div>
+      <div class='card rounded-xl p-3 text-center'><div class='text-xs text-gray-400'>CFG Edges</div><div class='text-xl font-semibold'>3</div></div>
+      <div class='card rounded-xl p-3 text-center'><div class='text-xs text-gray-400'>Issues</div><div class='text-xl font-semibold'>9</div></div>
+      <div class='card rounded-xl p-3 text-center'><div class='text-xs text-gray-400'>Time (ms)</div><div class='text-xl font-semibold'>0</div></div>
+    </section>
+
+    <!-- Findings -->
     <section class='card rounded-2xl p-4 shadow'>
       <h2 class='text-xl font-semibold mb-2'>Findings</h2>
       <div class='table-wrap'>
         <table class='min-w-full text-sm'>
           <thead>
             <tr class='text-left border-b border-gray-700'>
-              <th class='p-2'>Severity</th>
-              <th class='p-2'>Type</th>
-              <th class='p-2'>Message</th>
-              <th class='p-2'>CWE</th>
-              <th class='p-2'>Function</th>
-              <th class='p-2'>Quick Fix</th>
+              <th class='p-2'>Severity</th><th class='p-2'>Type</th><th class='p-2'>Message</th>
+              <th class='p-2'>CWE</th><th class='p-2'>Function</th><th class='p-2'>Quick Fix</th>
             </tr>
           </thead>
           <tbody>
-            
 <tr class='border-b border-gray-700 hover:bg-gray-800'>
   <td class='p-2'><span class='px-2 py-0.5 rounded text-white bg-red-600'>High</span></td>
   <td class='p-2'>Uninitialized Variable</td>
-  <td class='p-2'>Use of i may be uninitialized</td>
+  <td class='p-2'><a class='underline text-indigo-300 hover:text-indigo-100' href='#source'>Use of i may be uninitialized</a></td>
   <td class='p-2'>CWE-457</td>
   <td class='p-2'>f</td>
   <td class='p-2'><span class='text-gray-400'>—</span></td>
@@ -94,7 +71,7 @@
 <tr class='border-b border-gray-700 hover:bg-gray-800'>
   <td class='p-2'><span class='px-2 py-0.5 rounded text-white bg-red-600'>High</span></td>
   <td class='p-2'>Uninitialized Variable</td>
-  <td class='p-2'>Use of a, i may be uninitialized</td>
+  <td class='p-2'><a class='underline text-indigo-300 hover:text-indigo-100' href='#source'>Use of a[i], sum may be uninitialized</a></td>
   <td class='p-2'>CWE-457</td>
   <td class='p-2'>f</td>
   <td class='p-2'><span class='text-gray-400'>—</span></td>
@@ -103,7 +80,7 @@
 <tr class='border-b border-gray-700 hover:bg-gray-800'>
   <td class='p-2'><span class='px-2 py-0.5 rounded text-white bg-red-600'>High</span></td>
   <td class='p-2'>Uninitialized Variable</td>
-  <td class='p-2'>Use of n, p may be uninitialized</td>
+  <td class='p-2'><a class='underline text-indigo-300 hover:text-indigo-100' href='#source'>Use of p may be uninitialized</a></td>
   <td class='p-2'>CWE-457</td>
   <td class='p-2'>f</td>
   <td class='p-2'><span class='text-gray-400'>—</span></td>
@@ -112,7 +89,16 @@
 <tr class='border-b border-gray-700 hover:bg-gray-800'>
   <td class='p-2'><span class='px-2 py-0.5 rounded text-white bg-red-600'>High</span></td>
   <td class='p-2'>Uninitialized Variable</td>
-  <td class='p-2'>Use of argv may be uninitialized</td>
+  <td class='p-2'><a class='underline text-indigo-300 hover:text-indigo-100' href='#source'>Use of p, n may be uninitialized</a></td>
+  <td class='p-2'>CWE-457</td>
+  <td class='p-2'>f</td>
+  <td class='p-2'><span class='text-gray-400'>—</span></td>
+</tr>
+
+<tr class='border-b border-gray-700 hover:bg-gray-800'>
+  <td class='p-2'><span class='px-2 py-0.5 rounded text-white bg-red-600'>High</span></td>
+  <td class='p-2'>Uninitialized Variable</td>
+  <td class='p-2'><a class='underline text-indigo-300 hover:text-indigo-100' href='#source'>Use of src, argv[1] may be uninitialized</a></td>
   <td class='p-2'>CWE-457</td>
   <td class='p-2'>main</td>
   <td class='p-2'><span class='text-gray-400'>—</span></td>
@@ -121,25 +107,25 @@
 <tr class='border-b border-gray-700 hover:bg-gray-800'>
   <td class='p-2'><span class='px-2 py-0.5 rounded text-white bg-red-600'>High</span></td>
   <td class='p-2'>Uninitialized Variable</td>
-  <td class='p-2'>Use of dst, src may be uninitialized</td>
+  <td class='p-2'><a class='underline text-indigo-300 hover:text-indigo-100' href='#source'>Use of src, dst, strcpy may be uninitialized</a></td>
   <td class='p-2'>CWE-457</td>
   <td class='p-2'>main</td>
-  <td class='p-2'><span class='text-gray-400'>—</span></td>
+  <td class='p-2'><button class='px-2 py-1 rounded bg-emerald-600 text-white text-xs' data-fix='Use strncpy(dst, src, sizeof(dst)-1); dst[sizeof(dst)-1] = &#39;\0&#39;;' onclick='copyFix(this)'>Copy Fix</button></td>
 </tr>
 
 <tr class='border-b border-gray-700 hover:bg-gray-800'>
   <td class='p-2'><span class='px-2 py-0.5 rounded text-white bg-red-600'>High</span></td>
   <td class='p-2'>Unsafe Library Call</td>
-  <td class='p-2'>Call to strcpy may cause overflow or command injection</td>
+  <td class='p-2'><a class='underline text-indigo-300 hover:text-indigo-100' href='#L14'>Call to strcpy may cause overflow or command injection</a></td>
   <td class='p-2'>CWE-120</td>
   <td class='p-2'>main</td>
-  <td class='p-2'><button class='px-2 py-1 rounded bg-emerald-600 text-white text-xs' data-fix='strncpy(dst, src, sizeof(dst)-1); dst[sizeof(dst)-1] = &#39;\0&#39;;' onclick='copyFix(this)'>Copy Fix</button></td>
+  <td class='p-2'><button class='px-2 py-1 rounded bg-emerald-600 text-white text-xs' data-fix='Use strncpy(dst, src, sizeof(dst)-1); dst[sizeof(dst)-1] = &#39;\0&#39;;' onclick='copyFix(this)'>Copy Fix</button></td>
 </tr>
 
 <tr class='border-b border-gray-700 hover:bg-gray-800'>
   <td class='p-2'><span class='px-2 py-0.5 rounded text-white bg-red-600'>High</span></td>
   <td class='p-2'>Uninitialized Variable</td>
-  <td class='p-2'>Use of dst may be uninitialized</td>
+  <td class='p-2'><a class='underline text-indigo-300 hover:text-indigo-100' href='#source'>Use of printf, dst, &#34;%s\n&#34; may be uninitialized</a></td>
   <td class='p-2'>CWE-457</td>
   <td class='p-2'>main</td>
   <td class='p-2'><span class='text-gray-400'>—</span></td>
@@ -148,16 +134,50 @@
 <tr class='border-b border-gray-700 hover:bg-gray-800'>
   <td class='p-2'><span class='px-2 py-0.5 rounded text-white bg-red-600'>High</span></td>
   <td class='p-2'>Uninitialized Variable</td>
-  <td class='p-2'>Use of name=ID, op=&#39;-&#39;, value=&#39;1&#39;, name=&#39;argc&#39;, type=&#39;int&#39;, args=ExprList, left=ID, right=Constant, BinaryOp, exprs=, FuncCall, name=&#39;f&#39; may be uninitialized</td>
+  <td class='p-2'><a class='underline text-indigo-300 hover:text-indigo-100' href='#source'>Use of type=&#39;int&#39;, name=ID, exprs=[BinaryOp, ], op=&#39;-&#39;, FuncCall, name=&#39;argc&#39;, left=ID, right=Constant, value=&#39;1&#39;, name=&#39;f&#39;, args=ExprList may be uninitialized</a></td>
   <td class='p-2'>CWE-457</td>
   <td class='p-2'>main</td>
   <td class='p-2'><span class='text-gray-400'>—</span></td>
-</tr>
-          </tbody>
+</tr></tbody>
         </table>
       </div>
     </section>
 
+    <!-- Function Summaries -->
+    
+    <section class='card rounded-2xl p-4 shadow'>
+      <h2 class='text-xl font-semibold mb-2'>Function Summaries</h2>
+      <div class='table-wrap'>
+        <table class='min-w-full text-sm'>
+          <thead>
+            <tr class='text-left border-b border-gray-700'>
+              <th class='p-2'>Function</th>
+              <th class='p-2'>Params required non-null</th>
+              <th class='p-2'>Taints return</th>
+              <th class='p-2'>May return 0</th>
+            </tr>
+          </thead>
+          <tbody>
+        <tr class='border-b border-gray-700'>
+          <td class='p-2 font-mono'>f</td>
+          <td class='p-2'>—</td>
+          <td class='p-2'>No</td>
+          <td class='p-2'>No</td>
+        </tr>
+        
+        <tr class='border-b border-gray-700'>
+          <td class='p-2 font-mono'>main</td>
+          <td class='p-2'>—</td>
+          <td class='p-2'>No</td>
+          <td class='p-2'>No</td>
+        </tr>
+        </tbody>
+        </table>
+      </div>
+    </section>
+    
+
+    <!-- CFG -->
     <section class='card rounded-2xl p-4 shadow'>
       <h2 class='text-xl font-semibold mb-2'>CFG (per function)</h2>
       <div class='mb-3 flex flex-wrap items-center gap-2'><button type='button' onclick="showPanel('tab0',this)" class='tab-btn is-active'>f</button><button type='button' onclick="showPanel('tab1',this)" class='tab-btn '>main</button></div>
@@ -167,8 +187,8 @@ B2["B2"]
 B3["B3"]
 B1 --> B2
 B1 --> B3
-B2 --> B3</script>  <div id='graph-tab0' class='p-2 rounded bg-white overflow-auto min-h-[120px]'></div>  <div class='mt-3'>    <div class='text-sm text-gray-300 mb-1'>CFG Details</div>    <div class='p-2 rounded bg-gray-900 mb-2'><div class='font-semibold text-sm mb-1'>B1</div><div class='text-xs text-gray-300'>1: loop (i &lt;= 10)</div></div><div class='p-2 rounded bg-gray-900 mb-2'><div class='font-semibold text-sm mb-1'>B2</div><div class='text-xs text-gray-300'>2: sum = a[i]</div></div><div class='p-2 rounded bg-gray-900 mb-2'><div class='font-semibold text-sm mb-1'>B3</div><div class='text-xs text-gray-300'>4: p = 0<br/>5: return *p + 100 / n</div></div>  </div></div><div id='tab1' class='panel hidden' data-rendered='0'>  <script type='text/plain' class='mmd' id='mmd-tab1'>flowchart TD
-B1["B1"]</script>  <div id='graph-tab1' class='p-2 rounded bg-white overflow-auto min-h-[120px]'></div>  <div class='mt-3'>    <div class='text-sm text-gray-300 mb-1'>CFG Details</div>    <div class='p-2 rounded bg-gray-900 mb-2'><div class='font-semibold text-sm mb-1'>B1</div><div class='text-xs text-gray-300'>6: src = argv[1]<br/>7: call strcpy(dst, src)<br/>8: call printf(&#34;%s\n&#34;, dst)<br/>9: return FuncCall(name=ID(name=&#39;f&#39;
+B2 --> B3</script>  <div id='graph-tab0' class='p-2 rounded bg-white overflow-auto min-h-[120px]'></div>  <div class='mt-3'><div class='text-sm text-gray-300 mb-1'>CFG Details</div><div class='p-2 rounded bg-gray-900 mb-2'><div class='font-semibold text-sm mb-1'>B1</div><div class='text-xs text-gray-300'>1: loop (i &lt;= 10)</div></div><div class='p-2 rounded bg-gray-900 mb-2'><div class='font-semibold text-sm mb-1'>B2</div><div class='text-xs text-gray-300'>2: sum = a[i]</div></div><div class='p-2 rounded bg-gray-900 mb-2'><div class='font-semibold text-sm mb-1'>B3</div><div class='text-xs text-gray-300'>4: p = 0<br/>5: return *p + 100 / n</div></div></div></div><div id='tab1' class='panel hidden' data-rendered='0'>  <script type='text/plain' class='mmd' id='mmd-tab1'>flowchart TD
+B1["B1"]</script>  <div id='graph-tab1' class='p-2 rounded bg-white overflow-auto min-h-[120px]'></div>  <div class='mt-3'><div class='text-sm text-gray-300 mb-1'>CFG Details</div><div class='p-2 rounded bg-gray-900 mb-2'><div class='font-semibold text-sm mb-1'>B1</div><div class='text-xs text-gray-300'>6: src = argv[1]<br/>7: call strcpy(dst, src)<br/>8: call printf(&#34;%s\n&#34;, dst)<br/>9: return FuncCall(name=ID(name=&#39;f&#39;
                  ),
          args=ExprList(exprs=[BinaryOp(op=&#39;-&#39;,
                                        left=ID(name=&#39;argc&#39;
@@ -179,73 +199,71 @@ B1["B1"]</script>  <div id='graph-tab1' class='p-2 rounded bg-white overflow-aut
                                        )
                              ]
                        )
-         )</div></div>  </div></div>
+         )</div></div></div></div>
     </section>
 
-    <section class='card rounded-2xl p-4 shadow'>
+    <!-- Source -->
+    <section id='source' class='card rounded-2xl p-4 shadow'>
       <h2 class='text-xl font-semibold mb-2'>Source</h2>
-      <pre class='bg-black text-green-200 p-3 rounded overflow-auto text-xs sm:text-sm'><code>#include &lt;stdio.h&gt;
-#include &lt;string.h&gt;
-
-int f(int n){
-  int a[10]; int i, sum;  // sum uninitialized
-  for(i=0;i&lt;=10;i++) sum += a[i]; // OOB + uninit use
-  int *p = 0;
-  return *p + (100/n); // null deref + div by zero if n==0
-}
-
-int main(int argc, char** argv){
-  char dst[8];
-  char *src = argv[1]; // taint source
-  strcpy(dst, src);    // potential overflow
-  printf(&#34;%s\n&#34;, dst);
-  return f(argc-1);
-}</code></pre>
+      <div class='bg-black text-green-200 p-3 rounded overflow-auto text-xs sm:text-sm'>
+        <span id='L1' class='code-line block'><a class='line-no' href='#L1'>   1</a> </span>
+<span id='L2' class='code-line block'><a class='line-no' href='#L2'>   2</a> </span>
+<span id='L3' class='code-line block'><a class='line-no' href='#L3'>   3</a> </span>
+<span id='L4' class='code-line block'><a class='line-no' href='#L4'>   4</a> int f(int n){</span>
+<span id='L5' class='code-line block'><a class='line-no' href='#L5'>   5</a>   int a[10]; int i, sum;</span>
+<span id='L6' class='code-line block'><a class='line-no' href='#L6'>   6</a>   for(i=0;i&lt;=10;i++) sum += a[i];</span>
+<span id='L7' class='code-line block'><a class='line-no' href='#L7'>   7</a>   int *p = 0;</span>
+<span id='L8' class='code-line block'><a class='line-no' href='#L8'>   8</a>   return *p + (100/n);</span>
+<span id='L9' class='code-line block'><a class='line-no' href='#L9'>   9</a> }</span>
+<span id='L10' class='code-line block'><a class='line-no' href='#L10'>  10</a> </span>
+<span id='L11' class='code-line block'><a class='line-no' href='#L11'>  11</a> int main(int argc, char** argv){</span>
+<span id='L12' class='code-line block'><a class='line-no' href='#L12'>  12</a>   char dst[8];</span>
+<span id='L13' class='code-line block'><a class='line-no' href='#L13'>  13</a>   char *src = argv[1];</span>
+<span id='L14' class='code-line block'><a class='line-no' href='#L14'>  14</a>   <mark class='px-1 rounded bg-red-700 text-white'>strcpy</mark>(dst, src);</span>
+<span id='L15' class='code-line block'><a class='line-no' href='#L15'>  15</a>   printf(&#34;%s\n&#34;, dst);</span>
+<span id='L16' class='code-line block'><a class='line-no' href='#L16'>  16</a>   return f(argc-1);</span>
+<span id='L17' class='code-line block'><a class='line-no' href='#L17'>  17</a> }</span>
+      </div>
     </section>
 
     <footer class='text-gray-400 text-xs text-center'>Generated by SVD</footer>
   </div>
 
+  <!-- Payload for export -->
+  <script>
+    window.__SVD_PAYLOAD__ = {"file": "svd\\examples\\buggy.c", "metrics": {"loc": 17, "functions": 2, "cfg_nodes": 4, "cfg_edges": 3, "issues": 9, "analysis_ms": 0}, "findings": [{"function": "f", "severity": "High", "kind": "Uninitialized Variable", "message": "Use of i may be uninitialized", "cwe": "CWE-457", "evidence": {"sid": 1, "reads": ["i"]}}, {"function": "f", "severity": "High", "kind": "Uninitialized Variable", "message": "Use of a[i], sum may be uninitialized", "cwe": "CWE-457", "evidence": {"sid": 2, "reads": ["a[i]", "sum"]}}, {"function": "f", "severity": "High", "kind": "Uninitialized Variable", "message": "Use of p may be uninitialized", "cwe": "CWE-457", "evidence": {"sid": 4, "reads": ["p"]}}, {"function": "f", "severity": "High", "kind": "Uninitialized Variable", "message": "Use of p, n may be uninitialized", "cwe": "CWE-457", "evidence": {"sid": 5, "reads": ["p", "n"]}}, {"function": "main", "severity": "High", "kind": "Uninitialized Variable", "message": "Use of src, argv[1] may be uninitialized", "cwe": "CWE-457", "evidence": {"sid": 6, "reads": ["src", "argv[1]"]}}, {"function": "main", "severity": "High", "kind": "Uninitialized Variable", "message": "Use of src, dst, strcpy may be uninitialized", "cwe": "CWE-457", "evidence": {"sid": 7, "reads": ["src", "dst", "strcpy"], "fix": "Use strncpy(dst, src, sizeof(dst)-1); dst[sizeof(dst)-1] = '\\0';"}}, {"function": "main", "severity": "High", "kind": "Unsafe Library Call", "message": "Call to strcpy may cause overflow or command injection", "cwe": "CWE-120", "evidence": {"sid": 7, "call": "strcpy(dst, src)", "fix": "Use strncpy(dst, src, sizeof(dst)-1); dst[sizeof(dst)-1] = '\\0';"}}, {"function": "main", "severity": "High", "kind": "Uninitialized Variable", "message": "Use of printf, dst, \"%s\\n\" may be uninitialized", "cwe": "CWE-457", "evidence": {"sid": 8, "reads": ["printf", "dst", "\"%s\\n\""]}}, {"function": "main", "severity": "High", "kind": "Uninitialized Variable", "message": "Use of type='int', name=ID, exprs=[BinaryOp, ], op='-', FuncCall, name='argc', left=ID, right=Constant, value='1', name='f', args=ExprList may be uninitialized", "cwe": "CWE-457", "evidence": {"sid": 9, "reads": ["type='int'", "name=ID", "exprs=[BinaryOp", "]", "op='-'", "FuncCall", "name='argc'", "left=ID", "right=Constant", "value='1'", "name='f'", "args=ExprList"]}}]};
+  </script>
+
   <script type="module">
     import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
-    // No auto-processing. We render on demand for the visible tab.
     mermaid.initialize({ startOnLoad: false, theme: 'default' });
 
     async function renderMermaidInto(panelId) {
       const panel = document.getElementById(panelId);
-      if (!panel) return;
-      if (panel.dataset.rendered === '1') return; // already rendered
-
-      const mmdEl = panel.querySelector('script.mmd');
-      const graphEl = panel.querySelector('#graph-' + panelId);
-
-      if (!mmdEl || !graphEl) return;
-      const def = mmdEl.textContent || mmdEl.innerText || "";
-
+      if (!panel || panel.dataset.rendered === '1') return;
+      const mmd = panel.querySelector('script.mmd');
+      const target = panel.querySelector('#graph-' + panelId);
+      if (!mmd || !target) return;
+      const def = mmd.textContent || mmd.innerText || "";
       try {
         const { svg } = await mermaid.render('svg-' + panelId, def);
-        graphEl.innerHTML = svg;
+        target.innerHTML = svg;
         panel.dataset.rendered = '1';
       } catch (e) {
-        graphEl.innerHTML = "<div style='padding:.5rem;color:#b91c1c;'>Mermaid render error: " + (e?.message || e) + "</div>";
+        target.innerHTML = "<div style='padding:.5rem;color:#b91c1c;'>Mermaid render error: " + (e?.message || e) + "</div>";
       }
     }
 
-    window.showPanel = function(id, btn) {
-      // switch visibility
+    window.showPanel = (id, btn) => {
       document.querySelectorAll('.panel').forEach(p => p.classList.add('hidden'));
       const el = document.getElementById(id);
       el.classList.remove('hidden');
-
-      // tabs active state
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('is-active'));
       if (btn) btn.classList.add('is-active');
-
-      // render if not rendered yet
       renderMermaidInto(id);
     }
 
-    window.copyFix = function(btn) {
+    window.copyFix = (btn) => {
       const txt = btn?.dataset?.fix;
       if (!txt || txt === 'None') return;
       navigator.clipboard.writeText(txt).then(() => {
@@ -254,7 +272,38 @@ int main(int argc, char** argv){
       });
     }
 
-    // Render the first visible tab on load
+    // Export buttons: server mode (POST) or file:// fallback
+    const payload = window.__SVD_PAYLOAD__;
+    const btnJson = document.getElementById('btn-json');
+    const btnPdf  = document.getElementById('btn-pdf');
+
+    btnJson.addEventListener('click', () => {
+      if (location.protocol === 'file:') {
+        const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'svd-report.json';
+        a.click();
+        URL.revokeObjectURL(a.href);
+      } else {
+        const f = document.getElementById('export-json-form');
+        f.elements['data'].value = JSON.stringify(payload);
+        f.submit();
+      }
+    });
+
+    btnPdf.addEventListener('click', () => {
+      if (location.protocol === 'file:') {
+        // Simple and reliable: use browser "Print to PDF"
+        window.print();
+      } else {
+        const f = document.getElementById('export-pdf-form');
+        f.elements['data'].value = JSON.stringify(payload);
+        f.submit();
+      }
+    });
+
+    // Render first CFG on page load
     window.addEventListener('DOMContentLoaded', () => {
       const first = document.querySelector('.panel:not(.hidden)');
       if (first) renderMermaidInto(first.id);
