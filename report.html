@@ -1,0 +1,264 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset='utf-8'/>
+  <meta name='viewport' content='width=device-width, initial-scale=1' />
+  <title>Static Vulnerability Detector — svd/examples/buggy.c</title>
+  <link rel='stylesheet' href='https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css'/>
+  <style>
+    body { background: #0f172a; }
+    .card { background:#111827; color:#e5e7eb; }
+    .panel.hidden { display:none; }
+    .table-wrap { overflow:auto; }
+    code { white-space: pre; }
+    /* Tabs */
+    .tab-btn {
+      padding:.375rem .75rem; border-radius:.5rem; margin-right:.5rem;
+      background:#e5e7eb; color:#111827; transition: background .15s, color .15s;
+    }
+    .tab-btn:hover, .tab-btn.is-active { background:#4f46e5; color:#fff; }
+  </style>
+</head>
+<body class='min-h-screen'>
+  <div class='max-w-7xl mx-auto p-4 sm:p-6 space-y-6'>
+
+    <header class='flex items-center justify-between flex-wrap gap-3'>
+      <h1 class='text-2xl font-bold text-white'>Static Vulnerability Detector</h1>
+      <div class='text-gray-300 text-sm'>svd/examples/buggy.c</div>
+    </header>
+
+    <section class='grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3'>
+      
+    <div class='card rounded-xl p-3 text-center'>
+      <div class='text-xs text-gray-400'>LOC</div>
+      <div class='text-xl font-semibold'>17</div>
+    </div>
+    
+      
+    <div class='card rounded-xl p-3 text-center'>
+      <div class='text-xs text-gray-400'>Functions</div>
+      <div class='text-xl font-semibold'>2</div>
+    </div>
+    
+      
+    <div class='card rounded-xl p-3 text-center'>
+      <div class='text-xs text-gray-400'>CFG Nodes</div>
+      <div class='text-xl font-semibold'>4</div>
+    </div>
+    
+      
+    <div class='card rounded-xl p-3 text-center'>
+      <div class='text-xs text-gray-400'>CFG Edges</div>
+      <div class='text-xl font-semibold'>3</div>
+    </div>
+    
+      
+    <div class='card rounded-xl p-3 text-center'>
+      <div class='text-xs text-gray-400'>Issues</div>
+      <div class='text-xl font-semibold'>8</div>
+    </div>
+    
+      
+    <div class='card rounded-xl p-3 text-center'>
+      <div class='text-xs text-gray-400'>Time (ms)</div>
+      <div class='text-xl font-semibold'>19</div>
+    </div>
+    
+    </section>
+
+    <section class='card rounded-2xl p-4 shadow'>
+      <h2 class='text-xl font-semibold mb-2'>Findings</h2>
+      <div class='table-wrap'>
+        <table class='min-w-full text-sm'>
+          <thead>
+            <tr class='text-left border-b border-gray-700'>
+              <th class='p-2'>Severity</th>
+              <th class='p-2'>Type</th>
+              <th class='p-2'>Message</th>
+              <th class='p-2'>CWE</th>
+              <th class='p-2'>Function</th>
+              <th class='p-2'>Quick Fix</th>
+            </tr>
+          </thead>
+          <tbody>
+            
+<tr class='border-b border-gray-700 hover:bg-gray-800'>
+  <td class='p-2'><span class='px-2 py-0.5 rounded text-white bg-red-600'>High</span></td>
+  <td class='p-2'>Uninitialized Variable</td>
+  <td class='p-2'>Use of i may be uninitialized</td>
+  <td class='p-2'>CWE-457</td>
+  <td class='p-2'>f</td>
+  <td class='p-2'><span class='text-gray-400'>—</span></td>
+</tr>
+
+<tr class='border-b border-gray-700 hover:bg-gray-800'>
+  <td class='p-2'><span class='px-2 py-0.5 rounded text-white bg-red-600'>High</span></td>
+  <td class='p-2'>Uninitialized Variable</td>
+  <td class='p-2'>Use of a, i may be uninitialized</td>
+  <td class='p-2'>CWE-457</td>
+  <td class='p-2'>f</td>
+  <td class='p-2'><span class='text-gray-400'>—</span></td>
+</tr>
+
+<tr class='border-b border-gray-700 hover:bg-gray-800'>
+  <td class='p-2'><span class='px-2 py-0.5 rounded text-white bg-red-600'>High</span></td>
+  <td class='p-2'>Uninitialized Variable</td>
+  <td class='p-2'>Use of n, p may be uninitialized</td>
+  <td class='p-2'>CWE-457</td>
+  <td class='p-2'>f</td>
+  <td class='p-2'><span class='text-gray-400'>—</span></td>
+</tr>
+
+<tr class='border-b border-gray-700 hover:bg-gray-800'>
+  <td class='p-2'><span class='px-2 py-0.5 rounded text-white bg-red-600'>High</span></td>
+  <td class='p-2'>Uninitialized Variable</td>
+  <td class='p-2'>Use of argv may be uninitialized</td>
+  <td class='p-2'>CWE-457</td>
+  <td class='p-2'>main</td>
+  <td class='p-2'><span class='text-gray-400'>—</span></td>
+</tr>
+
+<tr class='border-b border-gray-700 hover:bg-gray-800'>
+  <td class='p-2'><span class='px-2 py-0.5 rounded text-white bg-red-600'>High</span></td>
+  <td class='p-2'>Uninitialized Variable</td>
+  <td class='p-2'>Use of dst, src may be uninitialized</td>
+  <td class='p-2'>CWE-457</td>
+  <td class='p-2'>main</td>
+  <td class='p-2'><span class='text-gray-400'>—</span></td>
+</tr>
+
+<tr class='border-b border-gray-700 hover:bg-gray-800'>
+  <td class='p-2'><span class='px-2 py-0.5 rounded text-white bg-red-600'>High</span></td>
+  <td class='p-2'>Unsafe Library Call</td>
+  <td class='p-2'>Call to strcpy may cause overflow or command injection</td>
+  <td class='p-2'>CWE-120</td>
+  <td class='p-2'>main</td>
+  <td class='p-2'><button class='px-2 py-1 rounded bg-emerald-600 text-white text-xs' data-fix='strncpy(dst, src, sizeof(dst)-1); dst[sizeof(dst)-1] = &#39;\0&#39;;' onclick='copyFix(this)'>Copy Fix</button></td>
+</tr>
+
+<tr class='border-b border-gray-700 hover:bg-gray-800'>
+  <td class='p-2'><span class='px-2 py-0.5 rounded text-white bg-red-600'>High</span></td>
+  <td class='p-2'>Uninitialized Variable</td>
+  <td class='p-2'>Use of dst may be uninitialized</td>
+  <td class='p-2'>CWE-457</td>
+  <td class='p-2'>main</td>
+  <td class='p-2'><span class='text-gray-400'>—</span></td>
+</tr>
+
+<tr class='border-b border-gray-700 hover:bg-gray-800'>
+  <td class='p-2'><span class='px-2 py-0.5 rounded text-white bg-red-600'>High</span></td>
+  <td class='p-2'>Uninitialized Variable</td>
+  <td class='p-2'>Use of name=ID, op=&#39;-&#39;, value=&#39;1&#39;, name=&#39;argc&#39;, type=&#39;int&#39;, args=ExprList, left=ID, right=Constant, BinaryOp, exprs=, FuncCall, name=&#39;f&#39; may be uninitialized</td>
+  <td class='p-2'>CWE-457</td>
+  <td class='p-2'>main</td>
+  <td class='p-2'><span class='text-gray-400'>—</span></td>
+</tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class='card rounded-2xl p-4 shadow'>
+      <h2 class='text-xl font-semibold mb-2'>CFG (per function)</h2>
+      <div class='mb-3 flex flex-wrap items-center gap-2'><button type='button' onclick="showPanel('tab0',this)" class='tab-btn is-active'>f</button><button type='button' onclick="showPanel('tab1',this)" class='tab-btn '>main</button></div>
+      <div id='tab0' class='panel ' data-rendered='0'>  <script type='text/plain' class='mmd' id='mmd-tab0'>flowchart TD
+B1["B1"]
+B2["B2"]
+B3["B3"]
+B1 --> B2
+B1 --> B3
+B2 --> B3</script>  <div id='graph-tab0' class='p-2 rounded bg-white overflow-auto min-h-[120px]'></div>  <div class='mt-3'>    <div class='text-sm text-gray-300 mb-1'>CFG Details</div>    <div class='p-2 rounded bg-gray-900 mb-2'><div class='font-semibold text-sm mb-1'>B1</div><div class='text-xs text-gray-300'>1: loop (i &lt;= 10)</div></div><div class='p-2 rounded bg-gray-900 mb-2'><div class='font-semibold text-sm mb-1'>B2</div><div class='text-xs text-gray-300'>2: sum = a[i]</div></div><div class='p-2 rounded bg-gray-900 mb-2'><div class='font-semibold text-sm mb-1'>B3</div><div class='text-xs text-gray-300'>4: p = 0<br/>5: return *p + 100 / n</div></div>  </div></div><div id='tab1' class='panel hidden' data-rendered='0'>  <script type='text/plain' class='mmd' id='mmd-tab1'>flowchart TD
+B1["B1"]</script>  <div id='graph-tab1' class='p-2 rounded bg-white overflow-auto min-h-[120px]'></div>  <div class='mt-3'>    <div class='text-sm text-gray-300 mb-1'>CFG Details</div>    <div class='p-2 rounded bg-gray-900 mb-2'><div class='font-semibold text-sm mb-1'>B1</div><div class='text-xs text-gray-300'>6: src = argv[1]<br/>7: call strcpy(dst, src)<br/>8: call printf(&#34;%s\n&#34;, dst)<br/>9: return FuncCall(name=ID(name=&#39;f&#39;
+                 ),
+         args=ExprList(exprs=[BinaryOp(op=&#39;-&#39;,
+                                       left=ID(name=&#39;argc&#39;
+                                               ),
+                                       right=Constant(type=&#39;int&#39;,
+                                                      value=&#39;1&#39;
+                                                      )
+                                       )
+                             ]
+                       )
+         )</div></div>  </div></div>
+    </section>
+
+    <section class='card rounded-2xl p-4 shadow'>
+      <h2 class='text-xl font-semibold mb-2'>Source</h2>
+      <pre class='bg-black text-green-200 p-3 rounded overflow-auto text-xs sm:text-sm'><code>#include &lt;stdio.h&gt;
+#include &lt;string.h&gt;
+
+int f(int n){
+  int a[10]; int i, sum;  // sum uninitialized
+  for(i=0;i&lt;=10;i++) sum += a[i]; // OOB + uninit use
+  int *p = 0;
+  return *p + (100/n); // null deref + div by zero if n==0
+}
+
+int main(int argc, char** argv){
+  char dst[8];
+  char *src = argv[1]; // taint source
+  strcpy(dst, src);    // potential overflow
+  printf(&#34;%s\n&#34;, dst);
+  return f(argc-1);
+}</code></pre>
+    </section>
+
+    <footer class='text-gray-400 text-xs text-center'>Generated by SVD</footer>
+  </div>
+
+  <script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+    // No auto-processing. We render on demand for the visible tab.
+    mermaid.initialize({ startOnLoad: false, theme: 'default' });
+
+    async function renderMermaidInto(panelId) {
+      const panel = document.getElementById(panelId);
+      if (!panel) return;
+      if (panel.dataset.rendered === '1') return; // already rendered
+
+      const mmdEl = panel.querySelector('script.mmd');
+      const graphEl = panel.querySelector('#graph-' + panelId);
+
+      if (!mmdEl || !graphEl) return;
+      const def = mmdEl.textContent || mmdEl.innerText || "";
+
+      try {
+        const { svg } = await mermaid.render('svg-' + panelId, def);
+        graphEl.innerHTML = svg;
+        panel.dataset.rendered = '1';
+      } catch (e) {
+        graphEl.innerHTML = "<div style='padding:.5rem;color:#b91c1c;'>Mermaid render error: " + (e?.message || e) + "</div>";
+      }
+    }
+
+    window.showPanel = function(id, btn) {
+      // switch visibility
+      document.querySelectorAll('.panel').forEach(p => p.classList.add('hidden'));
+      const el = document.getElementById(id);
+      el.classList.remove('hidden');
+
+      // tabs active state
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('is-active'));
+      if (btn) btn.classList.add('is-active');
+
+      // render if not rendered yet
+      renderMermaidInto(id);
+    }
+
+    window.copyFix = function(btn) {
+      const txt = btn?.dataset?.fix;
+      if (!txt || txt === 'None') return;
+      navigator.clipboard.writeText(txt).then(() => {
+        btn.textContent = 'Copied!';
+        setTimeout(() => (btn.textContent = 'Copy Fix'), 1200);
+      });
+    }
+
+    // Render the first visible tab on load
+    window.addEventListener('DOMContentLoaded', () => {
+      const first = document.querySelector('.panel:not(.hidden)');
+      if (first) renderMermaidInto(first.id);
+    });
+  </script>
+</body>
+</html>

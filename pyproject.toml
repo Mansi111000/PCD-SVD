@@ -1,0 +1,18 @@
+[project]
+name = "svd"
+version = "0.1.0"
+description = "Static Vulnerability Detector"
+requires-python = ">=3.10"
+dependencies = [
+    "Flask==3.0.3",
+    "Jinja2==3.1.4",
+    "pycparser==2.22",
+    "networkx==3.3",
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["svd*"]

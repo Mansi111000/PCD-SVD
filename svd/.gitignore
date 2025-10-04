@@ -1,0 +1,16 @@
+# Ignore local envs and caches
+.venv
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+*.log
+
+# Ignore reports and temp files
+report.html
+
+# OS / IDE stuff
+.DS_Store
+Thumbs.db
+.vscode/
