@@ -1,0 +1,424 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>SVD • Report</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    :root{
+      --bg1:#0b1020; --bg2:#0e1630; --card:#111827cc;
+      --grad1:#5b8cff; --grad2:#8d5bff; --grad3:#32d1ff;
+      /* Same heights so Source never pushes CFG offscreen */
+      --pane-h: 480px;
+    }
+    body{
+      background:
+        radial-gradient(1200px 600px at 80% -10%, #1a2a6c20, transparent 60%),
+        radial-gradient(1000px 600px at -10% 20%, #b21f1f20, transparent 60%),
+        linear-gradient(120deg, var(--bg1), var(--bg2));
+      color:#e5e7eb;
+    }
+    .glass{ background: var(--card); backdrop-filter: blur(16px) saturate(140%);
+      -webkit-backdrop-filter: blur(16px) saturate(140%); border: 1px solid #ffffff14;
+      box-shadow: 0 10px 30px #0006, inset 0 1px 0 #ffffff12; }
+    .btn{ padding:.5rem .75rem; border-radius:.5rem; font-size:.875rem; font-weight:600;
+      transition:.15s; background: linear-gradient(135deg, #1f2937, #111827);
+      border:1px solid #ffffff1a; }
+    .btn:hover{ filter:brightness(1.12); transform: translateY(-1px); }
+    .btn-primary{ background: linear-gradient(135deg, var(--grad1), var(--grad2));
+      box-shadow: 0 10px 25px #5b8cff33, inset 0 1px 0 #fff3; border:none; }
+
+    @keyframes pulseRing{ 0%{ box-shadow: 0 0 0 0 rgba(239,68,68,.6) }
+      70%{ box-shadow: 0 0 0 12px rgba(239,68,68,0) } 100%{ box-shadow: 0 0 0 0 rgba(239,68,68,0) } }
+    .sev-high{ background:#ef4444; color:#fff; animation: pulseRing 2s infinite; }
+    .sev-med{ background:#f97316; color:#fff; }
+    .sev-low{ background:#facc15; color:#111827; }
+    .row-enter{ animation: rowIn .5s ease both; }
+    @keyframes rowIn{ from{opacity:0; transform: translateY(8px)} to{opacity:1; transform:none} }
+
+    /* Code viewer — aligned & scrollable with same height as CFG */
+    .code{
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New", monospace;
+      background:#070b16; border:1px solid #ffffff12; box-shadow: inset 0 0 0 1px #0005;
+      white-space: pre; tab-size: 4; -webkit-font-smoothing: antialiased; font-feature-settings: "liga" 0;
+      height: var(--pane-h); overflow: auto; scroll-margin-top: 72px;
+      font-size: 12px; line-height: 1.35;
+    }
+    .line{ display:grid; grid-template-columns: 3.2rem 1fr; }
+    .ln{ color:#9ca3af; user-select:none; padding:0 .5rem; text-align:right; border-right:1px solid #ffffff12; margin-right:.5rem; }
+    .lc{ display:block; white-space: pre; padding-right: .75rem; }
+    .line:hover{ background:#0b173170; }
+    .hl{ background:#1d4ed880 !important; transition: background .3s ease; }
+
+    /* CFG pane gets same fixed height + its own scrollbar */
+    .pane{
+      border:1px solid #ffffff1a; border-radius: .75rem; background:#070b16;
+      height: var(--pane-h); overflow:auto; padding: .75rem;
+    }
+
+    .sidebar{ width: 280px; transition: width .25s ease; }
+    .sidebar.collapsed{ width: 72px; }
+    .sidebar.collapsed .hideable{ display:none; }
+
+    .tab{ padding:.5rem .75rem; border-radius:.5rem; font-size:.875rem; font-weight:600;
+      background:#0b1224; border:1px solid #ffffff1a; }
+    .tab.active{ background: linear-gradient(135deg, var(--grad1), var(--grad2)); color:#fff; border:none; }
+
+    /* Ensure Mermaid SVG fits container */
+    #mmd-container svg{ width:100%; height:auto; display:block; }
+
+    ::-webkit-scrollbar{ height:10px; width:10px }
+    ::-webkit-scrollbar-thumb{ background:#23304f; border-radius:8px }
+    ::-webkit-scrollbar-track{ background:transparent }
+  </style>
+</head>
+<body class="min-h-screen">
+
+  <!-- Header -->
+  <header class="sticky top-0 z-50 backdrop-blur-xl bg-[#0b1020b3] border-b border-white/10">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <!-- Logo -->
+        <svg width="36" height="36" viewBox="0 0 100 100" class="rounded-xl">
+          <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#5b8cff"/><stop offset="100%" stop-color="#8d5bff"/></linearGradient></defs>
+          <rect x="0" y="0" width="100" height="100" rx="18" fill="url(#g)"/>
+          <path d="M25 65 L45 25 L60 50 L75 35" stroke="#fff" stroke-width="8" fill="none" stroke-linecap="round" />
+        </svg>
+        <div>
+          <div class="text-lg font-semibold">Static Vulnerability Detector</div>
+          <div class="text-xs text-gray-400">Report</div>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <button id="btn-export-json" class="btn">Export JSON</button>
+        <button id="btn-export-pdf" class="btn btn-primary">Export PDF</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Layout -->
+  <div class="max-w-7xl mx-auto px-4 py-6 grid grid-cols-12 gap-6">
+    <!-- Sidebar -->
+    <aside id="sidebar" class="sidebar glass rounded-2xl p-4 col-span-12 lg:col-span-3 h-fit">
+      <div class="flex items-center justify-between">
+        <span class="font-semibold">Overview</span>
+        <button id="btn-collapse" class="btn px-2 py-1">≡</button>
+      </div>
+
+      <!-- Progress -->
+      <div class="mt-4 text-xs text-gray-300">Analysis Progress</div>
+      <div class="w-full bg-[#0b1224] rounded-full h-2 mt-1 overflow-hidden border border-white/10">
+        <div id="prog" class="h-2 rounded-full bg-gradient-to-r from-[var(--grad1)] via-[var(--grad2)] to-[var(--grad3)] w-0"></div>
+      </div>
+
+      <!-- Stats -->
+      <div class="mt-6 grid gap-3">
+        <div class="glass rounded-xl p-3">
+          <div class="text-xs text-gray-400">LOC</div>
+          <div class="text-2xl font-bold" data-counter="0">0</div>
+        </div>
+        <div class="glass rounded-xl p-3">
+          <div class="text-xs text-gray-400">Functions</div>
+          <div class="text-2xl font-bold" data-counter="0">0</div>
+        </div>
+        <div class="glass rounded-xl p-3">
+          <div class="text-xs text-gray-400">Issues</div>
+          <div class="text-2xl font-bold" data-counter="0">0</div>
+        </div>
+
+        <!-- Donut (legend below so it never overlaps the ring) -->
+        <div class="glass rounded-xl p-3">
+          <div class="text-xs text-gray-400 mb-2">Severity Split</div>
+          <div class="relative w-40 h-40 mx-auto">
+            <svg viewBox="0 0 42 42" class="w-40 h-40 rotate-[-90deg] mx-auto block">
+              <circle cx="21" cy="21" r="15.915" fill="none" stroke="#1f2937" stroke-width="8"/>
+              <circle id="slice-high" cx="21" cy="21" r="15.915" fill="none" stroke="#ef4444" stroke-width="8" stroke-dasharray="0 100" stroke-linecap="round"/>
+              <circle id="slice-med"  cx="21" cy="21" r="15.915" fill="none" stroke="#f97316" stroke-width="8" stroke-dasharray="0 100" stroke-linecap="round"/>
+              <circle id="slice-low"  cx="21" cy="21" r="15.915" fill="none" stroke="#facc15" stroke-width="8" stroke-dasharray="0 100" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div class="mt-2 text-center text-sm">
+            <span class="text-red-400">High:</span> <span id="sevH">0</span>
+            <span class="mx-2 text-gray-500">•</span>
+            <span class="text-orange-400">Med:</span> <span id="sevM">0</span>
+            <span class="mx-2 text-gray-500">•</span>
+            <span class="text-yellow-300">Low:</span> <span id="sevL">0</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main -->
+    <main class="col-span-12 lg:col-span-9 grid gap-6">
+      <!-- Findings -->
+      <section class="glass rounded-2xl p-4">
+        <div class="flex flex-col md:flex-row md:items-center gap-3 justify-between">
+          <div>
+            <div class="text-lg font-semibold">Findings</div>
+            <div class="text-xs text-gray-400">Click a message → highlight code • Sort columns</div>
+          </div>
+          <div class="flex gap-2">
+            <input id="search" placeholder="Search findings…" class="w-64 bg-[#0b1224] border border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500" />
+            <select id="sevFilter" class="bg-[#0b1224] border border-white/10 rounded-lg px-3 py-2 text-sm">
+              <option value="">All severities</option>
+              <option>High</option><option>Medium</option><option>Low</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="overflow-auto mt-3">
+          <table id="tbl" class="min-w-full text-sm">
+            <thead>
+              <tr class="text-left border-b border-white/10">
+                <th class="p-2 cursor-pointer" data-sort="sev">Severity</th>
+                <th class="p-2 cursor-pointer" data-sort="type">Type</th>
+                <th class="p-2 cursor-pointer" data-sort="msg">Message</th>
+                <th class="p-2 cursor-pointer" data-sort="cwe">CWE</th>
+                <th class="p-2 cursor-pointer" data-sort="fn">Function</th>
+                <th class="p-2">Quick Fix</th>
+              </tr>
+            </thead>
+            <tbody id="tbody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- CFG + Code (side-by-side) -->
+      <section class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <!-- CFG -->
+        <div class="glass rounded-2xl p-4">
+          <div class="flex items-center justify-between">
+            <div class="text-lg font-semibold">CFG (per function)</div>
+            <div class="flex gap-2" id="cfgTabs"></div>
+          </div>
+          <div class="mt-3 pane">
+            <div id="mmd-container" class="min-h-[280px] text-sm text-gray-400">No CFG available.</div>
+          </div>
+        </div>
+
+        <!-- Source -->
+        <div id="codeCard" class="glass rounded-2xl p-4">
+          <div class="text-lg font-semibold mb-2">Source</div>
+          <!-- IMPORTANT: keep <pre> empty: no spaces/newlines inside -->
+          <pre id="code" class="code rounded-xl overflow-auto"></pre>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 px-4 py-2 rounded-lg glass opacity-0 pointer-events-none transition">
+    <span id="toastText">Exported</span>
+  </div>
+
+  <!-- Mermaid (module) -->
+  <script type="module">
+    const mod = await import('https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs');
+    window.mermaidLib = mod.default;
+    window.mermaidLib.initialize({ startOnLoad: false, theme: 'dark' });
+    window.dispatchEvent(new CustomEvent('mermaid-ready'));
+  </script>
+
+  <!-- Main UI logic -->
+  <script>
+    /* progress + counters */
+    const prog = document.getElementById('prog');
+    setTimeout(()=>{ prog.style.width = '100%'; prog.style.transition='width 1.2s ease'; }, 150);
+    document.querySelectorAll('[data-counter]').forEach(el=>{
+      const target = +el.dataset.counter || 0; let cur = 0;
+      const step = Math.max(1, Math.ceil(target/40));
+      const tick = ()=>{ cur += step; if(cur>=target){ cur=target } el.textContent = cur; if(cur<target) requestAnimationFrame(tick); };
+      requestAnimationFrame(tick);
+    });
+    document.getElementById('btn-collapse').onclick = ()=> document.getElementById('sidebar').classList.toggle('collapsed');
+
+    /* findings: search/filter/sort */
+    const tbody = document.getElementById('tbody');
+    const search = document.getElementById('search');
+    const sevF = document.getElementById('sevFilter');
+    function applyFilter(){
+      const q = (search.value||'').toLowerCase(); const s = sevF.value;
+      Array.from(tbody.children).forEach(r=>{
+        const hit = r.textContent.toLowerCase().includes(q);
+        const sev = r.dataset.sev;
+        r.style.display = (hit && (!s || s===sev)) ? '' : 'none';
+      });
+      computeSeverity();
+    }
+    search.oninput = applyFilter; sevF.onchange = applyFilter;
+    document.querySelectorAll('th[data-sort]').forEach(th=>{
+      th.addEventListener('click', ()=>{
+        const idx = Array.from(th.parentNode.children).indexOf(th);
+        const asc = th.dataset.asc !== 'true'; th.dataset.asc = asc;
+        const filtered = Array.from(tbody.children).filter(r=>r.style.display!=='none');
+        filtered.sort((a,b)=>{
+          const A=a.children[idx].innerText.trim(), B=b.children[idx].innerText.trim();
+          return asc ? A.localeCompare(B) : B.localeCompare(A);
+        });
+        filtered.forEach(r=>tbody.appendChild(r));
+      });
+    });
+
+    /* click → jump to code line */
+    const code = document.getElementById('code');
+    function jumpToLine(line){
+      code.querySelectorAll('.line').forEach(l=>l.classList.remove('hl'));
+      const tgt = document.getElementById('L'+line) || code.querySelectorAll('.line')[line-1];
+      if(tgt){ tgt.classList.add('hl'); tgt.scrollIntoView({behavior:'smooth', block:'center'}); }
+    }
+    tbody.addEventListener('click', e=>{
+      const msgCell = e.target.closest('.msg-link') || e.target.closest('tr');
+      if(!msgCell) return;
+      const tr = msgCell.closest('tr'); const line = +tr.dataset.line || 1;
+      jumpToLine(line);
+    });
+
+    /* copy fix */
+    function bindCopyButtons(){
+      tbody.querySelectorAll('.copy-fix').forEach(btn=>{
+        btn.onclick = ()=>{
+          const txt = btn.dataset.fix || '';
+          if(!txt) return;
+          navigator.clipboard.writeText(txt).then(()=>{
+            const prev = btn.textContent; btn.textContent = 'Copied!';
+            setTimeout(()=> btn.textContent = prev, 1200);
+          });
+        }
+      });
+    }
+    bindCopyButtons();
+
+    /* severity donut */
+    function computeSeverity(){
+      const visible = Array.from(tbody.children).filter(r=>r.style.display!=='none');
+      let hi=0, me=0, lo=0;
+      visible.forEach(r=>{ const s=r.dataset.sev; if(s==='High') hi++; else if(s==='Medium') me++; else if(s==='Low') lo++; });
+      const total = Math.max(1, hi+me+lo);
+      const toDash = v => `${(v/total*100).toFixed(2)} ${100-(v/total*100).toFixed(2)}`;
+      const H = document.getElementById('slice-high'); const M=document.getElementById('slice-med'); const L=document.getElementById('slice-low');
+      H.setAttribute('stroke-dasharray', toDash(hi));
+      M.setAttribute('stroke-dasharray', toDash(me));
+      L.setAttribute('stroke-dasharray', toDash(lo));
+      M.setAttribute('transform', `rotate(${(hi/total)*360} 21 21)`);
+      L.setAttribute('transform', `rotate(${((hi+me)/total)*360} 21 21)`);
+      document.getElementById('sevH').textContent = hi;
+      document.getElementById('sevM').textContent = me;
+      document.getElementById('sevL').textContent = lo;
+    }
+    computeSeverity();
+
+    /* exports */
+    const toast = (txt)=>{ const t=document.getElementById('toast'); document.getElementById('toastText').textContent = txt; t.style.opacity=1; setTimeout(()=> t.style.opacity=0, 1200); };
+    document.getElementById('btn-export-json').onclick=()=>{
+      const data = Array.from(tbody.children).map(tr=>({
+        line: +tr.dataset.line||null,
+        severity: tr.children[0].innerText.trim(),
+        type: tr.children[1].innerText.trim(),
+        message: tr.children[2].innerText.trim(),
+        cwe: tr.children[3].innerText.trim(),
+        function: tr.children[4].innerText.trim(),
+      }));
+      const blob = new Blob([JSON.stringify({findings:data},null,2)], {type:'application/json'});
+      const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='svd-report.json'; a.click(); URL.revokeObjectURL(a.href);
+      toast('JSON exported');
+    };
+    document.getElementById('btn-export-pdf').onclick=()=>{ window.print(); toast('Open Print → Save as PDF'); };
+
+    /* ---------------- Mermaid CFG (multi-function tabs) ---------------- */
+
+    // Read cfg-mermaid JSON safely (handles order-of-insert, SPA-like reloads)
+    function tryReadCfgArray(){
+      const el = document.getElementById('cfg-mermaid');
+      if(!el) return null;                   // not injected yet
+      let raw = el.textContent || '';
+      raw = raw.replace(/\u0000/g,'').trim();
+      try { return JSON.parse(raw || '[]'); } catch { return []; }
+    }
+
+    const tabs = document.getElementById('cfgTabs');
+    const container = document.getElementById('mmd-container');
+
+    const sanitizeDiagram = (txt='')=>{
+      const cleaned = String(txt).replace(/\r/g,'').replace(/`/g,"'");
+      const init = "%%{init: {'theme':'dark'}}%%\n";
+      return cleaned.startsWith('%%{init:') ? cleaned : (init + cleaned);
+    };
+
+    async function renderMermaid(diagramText, key='mmd0'){
+      if(!window.mermaidLib) return;
+      const diagram = sanitizeDiagram(diagramText||'');
+      try{
+        const { svg } = await window.mermaidLib.render(key, diagram);
+        container.innerHTML = svg;
+      }catch(e){
+        container.innerHTML = `<div class="text-red-400 text-sm">Mermaid render error: ${String(e).slice(0,200)}</div>
+          <pre class="text-xs text-gray-300 mt-2 whitespace-pre-wrap">${diagram.replace(/</g,'&lt;')}</pre>`;
+      }
+    }
+
+    function buildTabsFrom(cfgArr){
+      tabs.innerHTML = '';
+      if(!cfgArr || !cfgArr.length){
+        container.textContent = 'No CFG available.';
+        return;
+      }
+      cfgArr.forEach((cfg,i)=>{
+        const b=document.createElement('button');
+        b.className='tab'+(i===0?' active':'');
+        b.textContent = cfg.name || ('fun'+i);
+        b.onclick = ()=>{
+          tabs.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+          b.classList.add('active');
+          renderMermaid(cfg.diagram, 'mmd'+i);
+        };
+        tabs.appendChild(b);
+      });
+      renderMermaid(cfgArr[0].diagram, 'mmd0');
+    }
+
+    function initCFG(){
+      const data = tryReadCfgArray();
+      if(data === null) return false; // not injected yet
+      buildTabsFrom(data);
+      return true;
+    }
+
+    // Try when Mermaid is ready; if cfg isn't there yet, observe DOM for injection
+    function bootWhenReady(){
+      if (initCFG()) return;
+      // Watch for the cfg-mermaid script to arrive
+      const obs = new MutationObserver((_muts, observer)=>{
+        const ok = initCFG();
+        if(ok) observer.disconnect();
+      });
+      obs.observe(document.body || document.documentElement, {childList:true, subtree:true});
+    }
+
+    if (window.mermaidLib) {
+      // DOMContentLoaded ensures #mmd-container exists
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', bootWhenReady, {once:true});
+      } else {
+        bootWhenReady();
+      }
+    } else {
+      window.addEventListener('mermaid-ready', ()=>{
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', bootWhenReady, {once:true});
+        } else {
+          bootWhenReady();
+        }
+      }, {once:true});
+    }
+  </script>
+
+  <!-- Python injects at the very end:
+       <script id="cfg-mermaid" type="application/json">[
+          {"name":"f","diagram":"flowchart TD\n..."}, {"name":"main","diagram":"flowchart TD\n..."}
+       ]</script>
+       and fills #code with lines like:
+       <div id="L12" class="line"><span class="ln">12</span><span class="lc">char dst[8];</span></div>
+  -->
+</body>
+</html>

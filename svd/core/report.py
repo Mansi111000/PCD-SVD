@@ -1,355 +1,262 @@
 from __future__ import annotations
-from typing import Dict, Any, List, Tuple, Iterable
+from typing import Dict, Any, Iterable, List, Tuple
+from pathlib import Path
+import re, json
 from markupsafe import escape
-import json, re
 
-from .cfg import CFG, cfg_to_mermaid, cfg_block_details
+from .cfg import CFG, cfg_to_mermaid
 from .utils import FindingSet
 
-TAILWIND = "https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css"
-MERMAID = "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs"
+TEMPLATE_PATH = Path(__file__).resolve().parent.parent / "templates" / "premium_report.html"
 
-UNSAFE_FUNCS = re.compile(r'\b(strcpy|strcat|gets|scanf|system|memcpy)\b')
+# ---------- Finding helpers ----------
 
 def _iter_issues(fset: Any) -> Iterable[Any]:
-    if fset is None: return []
+    if fset is None:
+        return []
     if hasattr(fset, "by_severity"):
-        try: return list(fset.by_severity())
-        except Exception: pass
-    issues = getattr(fset, "issues", None)
-    if isinstance(issues, list): return issues
-    try: return list(fset)
-    except Exception: return []
-
-def _count_issues(findings: Dict[str, Any]) -> int:
-    return sum(len(list(_iter_issues(fs))) for fs in findings.values())
-
-def _compute_metrics_default(source: str, cfgs: Dict[str, CFG], findings: Dict[str, Any]) -> Dict[str, Any]:
-    loc = len((source or "").splitlines())
-    fn = len(cfgs)
-    nodes = sum(len(cfg.blocks) for cfg in cfgs.values())
-    edges = sum(len(b.succ) for cfg in cfgs.values() for b in cfg.blocks.values())
-    issues = _count_issues(findings)
-    return {"loc": loc, "functions": fn, "cfg_nodes": nodes, "cfg_edges": edges, "issues": issues, "analysis_ms": None}
-
-def _sev_badge(sev: str) -> str:
-    s = (sev or "").lower()
-    if s.startswith("h"): return "bg-red-600"
-    if s.startswith("m"): return "bg-yellow-600"
-    if s.startswith("l"): return "bg-green-600"
-    return "bg-gray-600"
-
-def _stat(label: str, value: Any) -> str:
-    v = escape(str(value)) if value is not None else "—"
-    return f"<div class='card rounded-xl p-3 text-center'><div class='text-xs text-gray-400'>{escape(label)}</div><div class='text-xl font-semibold'>{v}</div></div>"
-
-def _render_source_with_anchors_and_highlights(source: str) -> Tuple[str, Dict[int, int]]:
-    lines = (source or "").replace("\r\n","\n").replace("\r","\n").split("\n")
-    rendered: List[str] = []
-    for i, raw in enumerate(lines, start=1):
-        esc = escape(raw)
-        esc = UNSAFE_FUNCS.sub(r"<mark class='px-1 rounded bg-red-700 text-white'>\1</mark>", str(esc))
-        rendered.append(f"<span id='L{i}' class='code-line block'><a class='line-no' href='#L{i}'>{i:>4}</a> {esc}</span>")
-    return "\n".join(rendered), {}
-
-def _finding_rows(findings: Dict[str, Any]) -> List[dict]:
-    out = []
-    for fname, fset in findings.items():
-        for it in _iter_issues(fset):
-            out.append({
-                "function": fname,
-                "severity": getattr(it,"severity",""),
-                "kind": getattr(it,"kind",""),
-                "message": getattr(it,"message",""),
-                "cwe": getattr(it,"cwe","") or "",
-                "evidence": getattr(it,"evidence",{}) or {},
-            })
-    return out
-
-def _guess_line_for_issue(issue: dict, source: str) -> int | None:
-    ev = issue.get("evidence") or {}
-    if "line" in ev:
         try:
-            ln = int(ev["line"])
-            return ln if ln > 0 else None
+            return list(fset.by_severity())
         except Exception:
             pass
-    snippet = ev.get("call") or ev.get("expr") or issue.get("message","")
-    if not snippet:
-        return None
-    src = (source or "").replace("\r\n","\n").replace("\r","\n").split("\n")
-    token = snippet.split("(")[0][:40]
+    issues = getattr(fset, "issues", None)
+    if isinstance(issues, list):
+        return issues
+    try:
+        return list(fset)
+    except Exception:
+        return []
+
+# ---------- Source rendering ----------
+
+_UNSAFE_FUNCS = re.compile(r"\b(strcpy|strcat|gets|scanf|system|memcpy|printf)\b")
+
+def _render_code_with_lines(source: str) -> str:
+    src = (source or "").replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    out: List[str] = []
     for i, line in enumerate(src, start=1):
-        if token and token in line:
-            return i
+        esc = escape(line)
+        esc = _UNSAFE_FUNCS.sub(
+            r"<mark class='px-1 rounded bg-red-700 text-white'>\1</mark>", str(esc)
+        )
+        out.append(
+            f"<div class='line' id='L{i}'>"
+            f"<span class='ln'>{i:>4}</span>"
+            f"<span class='lc'>{esc}</span>"
+            f"</div>"
+        )
+    return "\n".join(out)
+
+# ---------- Line mapping ----------
+
+_TOKEN_RE = re.compile(r"[A-Za-z_]\w+")
+
+def _function_bounds(lines: List[str], fname: str) -> Tuple[int, int] | None:
+    pat = re.compile(rf"\b{re.escape(fname)}\s*\(")
+    start_idx = None
+    for i, ln in enumerate(lines):
+        if pat.search(ln):
+            start_idx = i
+            break
+    if start_idx is None:
+        return None
+    depth = 0
+    started = False
+    for j in range(start_idx, len(lines)):
+        depth += lines[j].count("{")
+        if depth > 0:
+            started = True
+        depth -= lines[j].count("}")
+        if started and depth == 0:
+            return (start_idx + 1, j + 1)
     return None
 
-def _render_summaries_card(summaries: Dict[str, dict]) -> str:
-    if not summaries: return ""
-    rows = []
-    for fname, sm in summaries.items():
-        pnn = ", ".join(sm.get("params_nonnull", [])) or "—"
-        tr  = "Yes" if sm.get("taints_return") else "No"
-        mrz = "Yes" if sm.get("may_return_zero") else "No"
-        rows.append(f"""
-        <tr class='border-b border-gray-700'>
-          <td class='p-2 font-mono'>{escape(fname)}</td>
-          <td class='p-2'>{escape(pnn)}</td>
-          <td class='p-2'>{escape(tr)}</td>
-          <td class='p-2'>{escape(mrz)}</td>
-        </tr>
-        """)
-    return f"""
-    <section class='card rounded-2xl p-4 shadow'>
-      <h2 class='text-xl font-semibold mb-2'>Function Summaries</h2>
-      <div class='table-wrap'>
-        <table class='min-w-full text-sm'>
-          <thead>
-            <tr class='text-left border-b border-gray-700'>
-              <th class='p-2'>Function</th>
-              <th class='p-2'>Params required non-null</th>
-              <th class='p-2'>Taints return</th>
-              <th class='p-2'>May return 0</th>
-            </tr>
-          </thead>
-          <tbody>{''.join(rows)}</tbody>
-        </table>
-      </div>
-    </section>
+def _scan_for_tokens(lines: List[str], tokens: List[str], bounds: Tuple[int,int] | None) -> int | None:
+    rng = range(len(lines))
+    if bounds:
+        lo, hi = bounds
+        rng = range(lo-1, hi)
+    toks = [t for t in tokens if t]
+    if not toks:
+        return None
+    for i in rng:
+        ln = lines[i]
+        if any(t in ln for t in toks):
+            return i+1
+    for i in range(len(lines)):
+        if any(t in lines[i] for t in toks):
+            return i+1
+    return None
+
+def _guess_issue_line(issue: Any, source: str, fname: str | None) -> int | None:
+    ev = getattr(issue, "evidence", None) or {}
+    if isinstance(ev, dict) and "line" in ev:
+        try:
+            ln = int(ev["line"])
+            if ln > 0:
+                return ln
+        except Exception:
+            pass
+    text = (source or "").replace("\r\n", "\n").replace("\r", "\n")
+    lines = text.split("\n")
+    bounds = _function_bounds(lines, fname) if fname else None
+
+    tokens: List[str] = []
+    if isinstance(ev, dict):
+        call = ev.get("call"); expr = ev.get("expr"); reads = ev.get("reads")
+        if call:
+            m = re.match(r"\s*([A-Za-z_]\w*)\s*\(", call)
+            tokens.append(m.group(1) if m else call[:32])
+        if expr:
+            tokens += _TOKEN_RE.findall(expr)
+        if isinstance(reads, (list, tuple)):
+            tokens += [str(x) for x in reads]
+    msg = getattr(issue, "message", "") or ""
+    tokens += _TOKEN_RE.findall(msg)
+    for sink in ("strcpy","strcat","gets","scanf","system","memcpy","printf"):
+        if sink in msg.lower():
+            tokens.append(sink)
+
+    return _scan_for_tokens(lines, tokens, bounds)
+
+# ---------- Findings table ----------
+
+def _sev_badge_class(sev: str) -> str:
+    s = (sev or "").lower()
+    if s.startswith("h"): return "sev-high"
+    if s.startswith("m"): return "sev-med"
+    if s.startswith("l"): return "sev-low"
+    return "bg-gray-600 text-white"
+
+def _build_rows(findings: Dict[str, FindingSet], source: str) -> tuple[str, Dict[str,int]]:
+    rows: List[str] = []
+    sev_counts = {"High":0, "Medium":0, "Low":0}
+    for fname, fset in (findings or {}).items():
+        for it in _iter_issues(fset):
+            sev = getattr(it, "severity", "") or ""
+            sev_counts[sev] = sev_counts.get(sev, 0) + 1
+            badge = _sev_badge_class(sev)
+            kind = escape(getattr(it, "kind", "") or "")
+            msg  = escape(getattr(it, "message", "") or "")
+            cwe  = escape(getattr(it, "cwe", "") or "") or "-"
+            ev   = getattr(it, "evidence", None) or {}
+            fix_btn = "<span class='text-gray-500 text-xs'>—</span>"
+            if isinstance(ev, dict) and ev.get("fix"):
+                fx = str(ev["fix"])
+                fix_btn = f"<button class='btn text-xs copy-fix' data-fix='{escape(fx)}'>Copy Fix</button>"
+            fn   = escape(fname)
+            line = _guess_issue_line(it, source, fname) or 1
+            rows.append(f"""
+<tr class="border-b border-white/10 hover:bg-white/5 row-enter" data-line="{line}" data-sev="{escape(sev)}">
+  <td class="p-2"><span class="px-2 py-0.5 rounded {badge}">{escape(sev)}</span></td>
+  <td class="p-2">{kind}</td>
+  <td class="p-2 msg-link underline decoration-dotted cursor-pointer">{msg}</td>
+  <td class="p-2">{cwe}</td>
+  <td class="p-2">{fn}</td>
+  <td class="p-2">{fix_btn}</td>
+</tr>""")
+    tbody_html = "\n".join(rows) if rows else "<tr><td class='p-3 text-gray-400' colspan='6'>No issues found</td></tr>"
+    return tbody_html, sev_counts
+
+# ---------- Counters ----------
+
+def _set_counter(html: str, label_text: str, value: int) -> str:
+    pattern = re.compile(
+        rf"(<div[^>]*class=\"[^\"]*text-xs[^\"]*\"[^>]*>\s*{re.escape(label_text)}\s*</div>\s*"
+        rf"<div[^>]*class=\"[^\"]*text-2xl[^\"]*\"[^>]*data-counter=\")(\d+)(\"[^>]*>)([^<]*)(</div>)",
+        re.I | re.S
+    )
+    def repl(m): return f"{m.group(1)}{value}{m.group(3)}{value}{m.group(5)}"
+    return pattern.sub(repl, html, count=1)
+
+# ---------- CFG payload (hardened) ----------
+
+def _sanitize_mermaid(txt: str) -> str:
+    if not txt:
+        return ""
+    # Make Mermaid/browser-safe
+    return (
+        txt.replace("\r", "")                       # remove CRs
+           .replace("`", "'")                       # avoid back-ticks breaking <script> parsing
+           .replace("</script>", "<\\/script>")     # never close our script tag
+           .strip()
+    )
+
+def _build_mermaid_payload(cfgs: Dict[str, CFG]) -> str:
     """
+    Build JSON array expected by the premium template:
+      [ { "name": "main", "diagram": "flowchart TD\\nA-->B" }, ... ]
+    Always returns a valid diagram string per function so the UI can render.
+    """
+    arr = []
+    for name, cfg in (cfgs or {}).items():
+        diagram = None
+        try:
+            d = cfg_to_mermaid(cfg)
+            d = _sanitize_mermaid(d)
+            # Ensure Mermaid sees a chart directive
+            if not d.lower().startswith(("flowchart", "graph")):
+                d = "flowchart TD\n" + d
+            diagram = d
+        except Exception:
+            pass
+
+    # Fallback so the UI never shows “No CFG available.”
+        if not diagram:
+            diagram = f"flowchart TD\nS((start))-->N[\"{name}\"]"
+
+        arr.append({"name": name, "diagram": diagram})
+
+    return json.dumps(arr)
+
+# ---------- Main ----------
 
 def make_report_html(
     source: str,
     cfgs: Dict[str, CFG],
     facts,
-    findings: Dict[str, Any],
+    findings: Dict[str, FindingSet],
     filename: str | None = None,
     metrics: Dict[str, Any] | None = None,
     summaries: Dict[str, dict] | None = None,
 ) -> str:
+    if not TEMPLATE_PATH.exists():
+        body = escape("premium_report.html not found at " + str(TEMPLATE_PATH))
+        return f"<!doctype html><html><body style='background:#0b1020;color:#eee;font-family:system-ui;padding:24px'>{body}</body></html>"
 
-    diagrams = {fname: cfg_to_mermaid(cfg) for fname, cfg in cfgs.items()}
-    details  = {fname: cfg_block_details(cfg) for fname, cfg in cfgs.items()}
-    base     = _compute_metrics_default(source, cfgs, findings)
-    m        = base if metrics is None else {**base, **metrics}
+    html = TEMPLATE_PATH.read_text(encoding="utf-8")
 
-    finding_list = _finding_rows(findings)
-    payload = {
-        "file": filename or "<input>",
-        "metrics": m,
-        "findings": finding_list
-    }
-    findings_json = json.dumps(payload)
+    # Findings rows
+    rows_html, _sev_counts = _build_rows(findings, source)
+    html = re.sub(
+        r'(<tbody\s+id=["\']tbody["\']\s*>)(.*?)(</tbody>)',
+        rf"\1{rows_html}\3",
+        html,
+        flags=re.S | re.I
+    )
 
-    rows = []
-    for item in finding_list:
-        ln = _guess_line_for_issue(item, source)
-        anchor = f"#L{ln}" if ln else "#source"
-        fix = (item.get("evidence") or {}).get("fix")
-        fix_cell = (f"<button class='px-2 py-1 rounded bg-emerald-600 text-white text-xs' "
-                    f"data-fix='{escape(fix)}' onclick='copyFix(this)'>Copy Fix</button>") if fix else "<span class='text-gray-400'>—</span>"
-        rows.append(f"""
-<tr class='border-b border-gray-700 hover:bg-gray-800'>
-  <td class='p-2'><span class='px-2 py-0.5 rounded text-white {_sev_badge(item.get("severity",""))}'>{escape(item.get("severity",""))}</span></td>
-  <td class='p-2'>{escape(item.get("kind",""))}</td>
-  <td class='p-2'><a class='underline text-indigo-300 hover:text-indigo-100' href='{anchor}'>{escape(item.get("message",""))}</a></td>
-  <td class='p-2'>{escape(item.get("cwe","") or "-")}</td>
-  <td class='p-2'>{escape(item.get("function",""))}</td>
-  <td class='p-2'>{fix_cell}</td>
-</tr>""")
-    issues_html = "\n".join(rows) or "<tr><td colspan=6 class='p-3'>No issues found</td></tr>"
+    # Code viewer (exact injection, no left padding)
+    code_html = _render_code_with_lines(source or "")
+    html = re.sub(
+        r'(<pre\s+id=["\']code["\'][^>]*>)(.*?)(</pre>)',
+        rf"\1{code_html}\3",
+        html,
+        flags=re.S | re.I
+    )
 
-    tabs, panels = [], []
-    for i, (fname, dia) in enumerate(diagrams.items()):
-        tab_id, graph_id, mmd_id = f"tab{i}", f"graph-tab{i}", f"mmd-tab{i}"
-        active_cls = "is-active" if i == 0 else ""
-        tabs.append(f"<button type='button' onclick=\"showPanel('{tab_id}',this)\" class='tab-btn {active_cls}'>{escape(fname)}</button>")
+    # Counters
+    loc = len((source or "").splitlines())
+    fcount = len(cfgs or {})
+    icount = sum(len(list(_iter_issues(fs))) for fs in (findings or {}).values())
+    html = _set_counter(html, "LOC", loc)
+    html = _set_counter(html, "Functions", fcount)
+    html = _set_counter(html, "Issues", icount)
 
-        detail_list = []
-        for bid, lines in details.get(fname, []):
-            esc_lines = "<br/>".join(escape(l) for l in lines) or "&mdash;"
-            detail_list.append(f"<div class='p-2 rounded bg-gray-900 mb-2'><div class='font-semibold text-sm mb-1'>{escape(bid)}</div><div class='text-xs text-gray-300'>{esc_lines}</div></div>")
+    # Embed Mermaid JSON (unescaped block the template reads)
+    mmd_json = _build_mermaid_payload(cfgs)
+    html = html.replace(
+        "</body>",
+        f'<script id="cfg-mermaid" type="application/json">{mmd_json}</script>\n</body>'
+    )
 
-        dia_script = (dia or "").replace("</script>", "<\\/script>")
-        panels.append(
-            f"<div id='{tab_id}' class='panel {'' if i==0 else 'hidden'}' data-rendered='0'>"
-            f"  <script type='text/plain' class='mmd' id='{mmd_id}'>{dia_script}</script>"
-            f"  <div id='{graph_id}' class='p-2 rounded bg-white overflow-auto min-h-[120px]'></div>"
-            f"  <div class='mt-3'><div class='text-sm text-gray-300 mb-1'>CFG Details</div>{''.join(detail_list)}</div>"
-            f"</div>"
-        )
-    cfg_tabs_html = "".join(tabs)
-    cfg_panels_html = "".join(panels)
-
-    source_html, _ = _render_source_with_anchors_and_highlights(source or "")
-
-    title = f"Static Vulnerability Detector — {escape(filename or '<input>')}"
-    return f"""<!doctype html>
-<html>
-<head>
-  <meta charset='utf-8'/><meta name='viewport' content='width=device-width, initial-scale=1' />
-  <title>{title}</title>
-  <link rel='stylesheet' href='{TAILWIND}'/>
-  <style>
-    body {{ background:#0f172a; }}
-    .card {{ background:#111827; color:#e5e7eb; }}
-    .panel.hidden {{ display:none; }}
-    .table-wrap {{ overflow:auto; }}
-    code {{ white-space: pre; }}
-    .tab-btn {{ padding:.375rem .75rem; border-radius:.5rem; margin-right:.5rem; background:#e5e7eb; color:#111827; transition: background .15s, color .15s; }}
-    .tab-btn:hover, .tab-btn.is-active {{ background:#4f46e5; color:#fff; }}
-    .code-line {{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New", monospace; }}
-    .line-no {{ display:inline-block; width:3rem; color:#9ca3af; text-decoration:none; }}
-    mark {{ background:#b91c1c; color:#fff; }}
-  </style>
-</head>
-<body class='min-h-screen'>
-  <div class='max-w-7xl mx-auto p-4 sm:p-6 space-y-6'>
-
-    <header class='flex items-center justify-between flex-wrap gap-3'>
-      <h1 class='text-2xl font-bold text-white'>Static Vulnerability Detector</h1>
-      <div class='text-gray-300 text-sm'>{escape(filename or '<input>')}</div>
-    </header>
-
-    <!-- Export buttons: work in server mode (POST) and in file:// mode (JS fallback) -->
-    <section class='flex items-center gap-2'>
-      <form id='export-json-form' method='post' action='/export/json' target='_blank' style='display:none'>
-        <input type='hidden' name='data' value=''/>
-      </form>
-      <form id='export-pdf-form' method='post' action='/export/pdf' target='_blank' style='display:none'>
-        <input type='hidden' name='data' value=''/>
-      </form>
-      <button id='btn-json' class='px-3 py-2 rounded bg-gray-700 text-white text-sm'>Export JSON</button>
-      <button id='btn-pdf'  class='px-3 py-2 rounded bg-gray-700 text-white text-sm'>Export PDF</button>
-    </section>
-
-    <!-- Metrics -->
-    <section class='grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3'>
-      {_stat('LOC', m.get('loc'))}
-      {_stat('Functions', m.get('functions'))}
-      {_stat('CFG Nodes', m.get('cfg_nodes'))}
-      {_stat('CFG Edges', m.get('cfg_edges'))}
-      {_stat('Issues', m.get('issues'))}
-      {_stat('Time (ms)', m.get('analysis_ms') if m.get('analysis_ms') is not None else '—')}
-    </section>
-
-    <!-- Findings -->
-    <section class='card rounded-2xl p-4 shadow'>
-      <h2 class='text-xl font-semibold mb-2'>Findings</h2>
-      <div class='table-wrap'>
-        <table class='min-w-full text-sm'>
-          <thead>
-            <tr class='text-left border-b border-gray-700'>
-              <th class='p-2'>Severity</th><th class='p-2'>Type</th><th class='p-2'>Message</th>
-              <th class='p-2'>CWE</th><th class='p-2'>Function</th><th class='p-2'>Quick Fix</th>
-            </tr>
-          </thead>
-          <tbody>{issues_html}</tbody>
-        </table>
-      </div>
-    </section>
-
-    <!-- Function Summaries -->
-    { _render_summaries_card(summaries or {}) }
-
-    <!-- CFG -->
-    <section class='card rounded-2xl p-4 shadow'>
-      <h2 class='text-xl font-semibold mb-2'>CFG (per function)</h2>
-      <div class='mb-3 flex flex-wrap items-center gap-2'>{cfg_tabs_html}</div>
-      {cfg_panels_html}
-    </section>
-
-    <!-- Source -->
-    <section id='source' class='card rounded-2xl p-4 shadow'>
-      <h2 class='text-xl font-semibold mb-2'>Source</h2>
-      <div class='bg-black text-green-200 p-3 rounded overflow-auto text-xs sm:text-sm'>
-        {source_html}
-      </div>
-    </section>
-
-    <footer class='text-gray-400 text-xs text-center'>Generated by SVD</footer>
-  </div>
-
-  <!-- Payload for export -->
-  <script>
-    window.__SVD_PAYLOAD__ = {findings_json};
-  </script>
-
-  <script type="module">
-    import mermaid from '{MERMAID}';
-    mermaid.initialize({{ startOnLoad: false, theme: 'default' }});
-
-    async function renderMermaidInto(panelId) {{
-      const panel = document.getElementById(panelId);
-      if (!panel || panel.dataset.rendered === '1') return;
-      const mmd = panel.querySelector('script.mmd');
-      const target = panel.querySelector('#graph-' + panelId);
-      if (!mmd || !target) return;
-      const def = mmd.textContent || mmd.innerText || "";
-      try {{
-        const {{ svg }} = await mermaid.render('svg-' + panelId, def);
-        target.innerHTML = svg;
-        panel.dataset.rendered = '1';
-      }} catch (e) {{
-        target.innerHTML = "<div style='padding:.5rem;color:#b91c1c;'>Mermaid render error: " + (e?.message || e) + "</div>";
-      }}
-    }}
-
-    window.showPanel = (id, btn) => {{
-      document.querySelectorAll('.panel').forEach(p => p.classList.add('hidden'));
-      const el = document.getElementById(id);
-      el.classList.remove('hidden');
-      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('is-active'));
-      if (btn) btn.classList.add('is-active');
-      renderMermaidInto(id);
-    }}
-
-    window.copyFix = (btn) => {{
-      const txt = btn?.dataset?.fix;
-      if (!txt || txt === 'None') return;
-      navigator.clipboard.writeText(txt).then(() => {{
-        btn.textContent = 'Copied!';
-        setTimeout(() => (btn.textContent = 'Copy Fix'), 1200);
-      }});
-    }}
-
-    // Export buttons: server mode (POST) or file:// fallback
-    const payload = window.__SVD_PAYLOAD__;
-    const btnJson = document.getElementById('btn-json');
-    const btnPdf  = document.getElementById('btn-pdf');
-
-    btnJson.addEventListener('click', () => {{
-      if (location.protocol === 'file:') {{
-        const blob = new Blob([JSON.stringify(payload, null, 2)], {{type:'application/json'}});
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = 'svd-report.json';
-        a.click();
-        URL.revokeObjectURL(a.href);
-      }} else {{
-        const f = document.getElementById('export-json-form');
-        f.elements['data'].value = JSON.stringify(payload);
-        f.submit();
-      }}
-    }});
-
-    btnPdf.addEventListener('click', () => {{
-      if (location.protocol === 'file:') {{
-        // Simple and reliable: use browser "Print to PDF"
-        window.print();
-      }} else {{
-        const f = document.getElementById('export-pdf-form');
-        f.elements['data'].value = JSON.stringify(payload);
-        f.submit();
-      }}
-    }});
-
-    // Render first CFG on page load
-    window.addEventListener('DOMContentLoaded', () => {{
-      const first = document.querySelector('.panel:not(.hidden)');
-      if (first) renderMermaidInto(first.id);
-    }});
-  </script>
-</body>
-</html>
-"""
+    return html

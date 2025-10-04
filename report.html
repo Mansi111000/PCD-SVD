@@ -1,313 +1,523 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
-  <meta charset='utf-8'/><meta name='viewport' content='width=device-width, initial-scale=1' />
-  <title>Static Vulnerability Detector — svd\examples\buggy.c</title>
-  <link rel='stylesheet' href='https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css'/>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>SVD • Report</title>
+  <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    body { background:#0f172a; }
-    .card { background:#111827; color:#e5e7eb; }
-    .panel.hidden { display:none; }
-    .table-wrap { overflow:auto; }
-    code { white-space: pre; }
-    .tab-btn { padding:.375rem .75rem; border-radius:.5rem; margin-right:.5rem; background:#e5e7eb; color:#111827; transition: background .15s, color .15s; }
-    .tab-btn:hover, .tab-btn.is-active { background:#4f46e5; color:#fff; }
-    .code-line { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New", monospace; }
-    .line-no { display:inline-block; width:3rem; color:#9ca3af; text-decoration:none; }
-    mark { background:#b91c1c; color:#fff; }
+    :root{
+      --bg1:#0b1020; --bg2:#0e1630; --card:#111827cc;
+      --grad1:#5b8cff; --grad2:#8d5bff; --grad3:#32d1ff;
+      /* Same heights so Source never pushes CFG offscreen */
+      --pane-h: 480px;
+    }
+    body{
+      background:
+        radial-gradient(1200px 600px at 80% -10%, #1a2a6c20, transparent 60%),
+        radial-gradient(1000px 600px at -10% 20%, #b21f1f20, transparent 60%),
+        linear-gradient(120deg, var(--bg1), var(--bg2));
+      color:#e5e7eb;
+    }
+    .glass{ background: var(--card); backdrop-filter: blur(16px) saturate(140%);
+      -webkit-backdrop-filter: blur(16px) saturate(140%); border: 1px solid #ffffff14;
+      box-shadow: 0 10px 30px #0006, inset 0 1px 0 #ffffff12; }
+    .btn{ padding:.5rem .75rem; border-radius:.5rem; font-size:.875rem; font-weight:600;
+      transition:.15s; background: linear-gradient(135deg, #1f2937, #111827);
+      border:1px solid #ffffff1a; }
+    .btn:hover{ filter:brightness(1.12); transform: translateY(-1px); }
+    .btn-primary{ background: linear-gradient(135deg, var(--grad1), var(--grad2));
+      box-shadow: 0 10px 25px #5b8cff33, inset 0 1px 0 #fff3; border:none; }
+
+    @keyframes pulseRing{ 0%{ box-shadow: 0 0 0 0 rgba(239,68,68,.6) }
+      70%{ box-shadow: 0 0 0 12px rgba(239,68,68,0) } 100%{ box-shadow: 0 0 0 0 rgba(239,68,68,0) } }
+    .sev-high{ background:#ef4444; color:#fff; animation: pulseRing 2s infinite; }
+    .sev-med{ background:#f97316; color:#fff; }
+    .sev-low{ background:#facc15; color:#111827; }
+    .row-enter{ animation: rowIn .5s ease both; }
+    @keyframes rowIn{ from{opacity:0; transform: translateY(8px)} to{opacity:1; transform:none} }
+
+    /* Code viewer — aligned & scrollable with same height as CFG */
+    .code{
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New", monospace;
+      background:#070b16; border:1px solid #ffffff12; box-shadow: inset 0 0 0 1px #0005;
+      white-space: pre; tab-size: 4; -webkit-font-smoothing: antialiased; font-feature-settings: "liga" 0;
+      height: var(--pane-h); overflow: auto; scroll-margin-top: 72px;
+      font-size: 12px; line-height: 1.35;
+    }
+    .line{ display:grid; grid-template-columns: 3.2rem 1fr; }
+    .ln{ color:#9ca3af; user-select:none; padding:0 .5rem; text-align:right; border-right:1px solid #ffffff12; margin-right:.5rem; }
+    .lc{ display:block; white-space: pre; padding-right: .75rem; }
+    .line:hover{ background:#0b173170; }
+    .hl{ background:#1d4ed880 !important; transition: background .3s ease; }
+
+    /* CFG pane gets same fixed height + its own scrollbar */
+    .pane{
+      border:1px solid #ffffff1a; border-radius: .75rem; background:#070b16;
+      height: var(--pane-h); overflow:auto; padding: .75rem;
+    }
+
+    .sidebar{ width: 280px; transition: width .25s ease; }
+    .sidebar.collapsed{ width: 72px; }
+    .sidebar.collapsed .hideable{ display:none; }
+
+    .tab{ padding:.5rem .75rem; border-radius:.5rem; font-size:.875rem; font-weight:600;
+      background:#0b1224; border:1px solid #ffffff1a; }
+    .tab.active{ background: linear-gradient(135deg, var(--grad1), var(--grad2)); color:#fff; border:none; }
+
+    /* Ensure Mermaid SVG fits container */
+    #mmd-container svg{ width:100%; height:auto; display:block; }
+
+    ::-webkit-scrollbar{ height:10px; width:10px }
+    ::-webkit-scrollbar-thumb{ background:#23304f; border-radius:8px }
+    ::-webkit-scrollbar-track{ background:transparent }
   </style>
 </head>
-<body class='min-h-screen'>
-  <div class='max-w-7xl mx-auto p-4 sm:p-6 space-y-6'>
+<body class="min-h-screen">
 
-    <header class='flex items-center justify-between flex-wrap gap-3'>
-      <h1 class='text-2xl font-bold text-white'>Static Vulnerability Detector</h1>
-      <div class='text-gray-300 text-sm'>svd\examples\buggy.c</div>
-    </header>
+  <!-- Header -->
+  <header class="sticky top-0 z-50 backdrop-blur-xl bg-[#0b1020b3] border-b border-white/10">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <!-- Logo -->
+        <svg width="36" height="36" viewBox="0 0 100 100" class="rounded-xl">
+          <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#5b8cff"/><stop offset="100%" stop-color="#8d5bff"/></linearGradient></defs>
+          <rect x="0" y="0" width="100" height="100" rx="18" fill="url(#g)"/>
+          <path d="M25 65 L45 25 L60 50 L75 35" stroke="#fff" stroke-width="8" fill="none" stroke-linecap="round" />
+        </svg>
+        <div>
+          <div class="text-lg font-semibold">Static Vulnerability Detector</div>
+          <div class="text-xs text-gray-400">Report</div>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <button id="btn-export-json" class="btn">Export JSON</button>
+        <button id="btn-export-pdf" class="btn btn-primary">Export PDF</button>
+      </div>
+    </div>
+  </header>
 
-    <!-- Export buttons: work in server mode (POST) and in file:// mode (JS fallback) -->
-    <section class='flex items-center gap-2'>
-      <form id='export-json-form' method='post' action='/export/json' target='_blank' style='display:none'>
-        <input type='hidden' name='data' value=''/>
-      </form>
-      <form id='export-pdf-form' method='post' action='/export/pdf' target='_blank' style='display:none'>
-        <input type='hidden' name='data' value=''/>
-      </form>
-      <button id='btn-json' class='px-3 py-2 rounded bg-gray-700 text-white text-sm'>Export JSON</button>
-      <button id='btn-pdf'  class='px-3 py-2 rounded bg-gray-700 text-white text-sm'>Export PDF</button>
-    </section>
+  <!-- Layout -->
+  <div class="max-w-7xl mx-auto px-4 py-6 grid grid-cols-12 gap-6">
+    <!-- Sidebar -->
+    <aside id="sidebar" class="sidebar glass rounded-2xl p-4 col-span-12 lg:col-span-3 h-fit">
+      <div class="flex items-center justify-between">
+        <span class="font-semibold">Overview</span>
+        <button id="btn-collapse" class="btn px-2 py-1">≡</button>
+      </div>
 
-    <!-- Metrics -->
-    <section class='grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3'>
-      <div class='card rounded-xl p-3 text-center'><div class='text-xs text-gray-400'>LOC</div><div class='text-xl font-semibold'>17</div></div>
-      <div class='card rounded-xl p-3 text-center'><div class='text-xs text-gray-400'>Functions</div><div class='text-xl font-semibold'>2</div></div>
-      <div class='card rounded-xl p-3 text-center'><div class='text-xs text-gray-400'>CFG Nodes</div><div class='text-xl font-semibold'>4</div></div>
-      <div class='card rounded-xl p-3 text-center'><div class='text-xs text-gray-400'>CFG Edges</div><div class='text-xl font-semibold'>3</div></div>
-      <div class='card rounded-xl p-3 text-center'><div class='text-xs text-gray-400'>Issues</div><div class='text-xl font-semibold'>9</div></div>
-      <div class='card rounded-xl p-3 text-center'><div class='text-xs text-gray-400'>Time (ms)</div><div class='text-xl font-semibold'>0</div></div>
-    </section>
+      <!-- Progress -->
+      <div class="mt-4 text-xs text-gray-300">Analysis Progress</div>
+      <div class="w-full bg-[#0b1224] rounded-full h-2 mt-1 overflow-hidden border border-white/10">
+        <div id="prog" class="h-2 rounded-full bg-gradient-to-r from-[var(--grad1)] via-[var(--grad2)] to-[var(--grad3)] w-0"></div>
+      </div>
 
-    <!-- Findings -->
-    <section class='card rounded-2xl p-4 shadow'>
-      <h2 class='text-xl font-semibold mb-2'>Findings</h2>
-      <div class='table-wrap'>
-        <table class='min-w-full text-sm'>
-          <thead>
-            <tr class='text-left border-b border-gray-700'>
-              <th class='p-2'>Severity</th><th class='p-2'>Type</th><th class='p-2'>Message</th>
-              <th class='p-2'>CWE</th><th class='p-2'>Function</th><th class='p-2'>Quick Fix</th>
-            </tr>
-          </thead>
-          <tbody>
-<tr class='border-b border-gray-700 hover:bg-gray-800'>
-  <td class='p-2'><span class='px-2 py-0.5 rounded text-white bg-red-600'>High</span></td>
-  <td class='p-2'>Uninitialized Variable</td>
-  <td class='p-2'><a class='underline text-indigo-300 hover:text-indigo-100' href='#source'>Use of i may be uninitialized</a></td>
-  <td class='p-2'>CWE-457</td>
-  <td class='p-2'>f</td>
-  <td class='p-2'><span class='text-gray-400'>—</span></td>
+      <!-- Stats -->
+      <div class="mt-6 grid gap-3">
+        <div class="glass rounded-xl p-3">
+          <div class="text-xs text-gray-400">LOC</div>
+          <div class="text-2xl font-bold" data-counter="17">17</div>
+        </div>
+        <div class="glass rounded-xl p-3">
+          <div class="text-xs text-gray-400">Functions</div>
+          <div class="text-2xl font-bold" data-counter="2">2</div>
+        </div>
+        <div class="glass rounded-xl p-3">
+          <div class="text-xs text-gray-400">Issues</div>
+          <div class="text-2xl font-bold" data-counter="9">9</div>
+        </div>
+
+        <!-- Donut (legend below so it never overlaps the ring) -->
+        <div class="glass rounded-xl p-3">
+          <div class="text-xs text-gray-400 mb-2">Severity Split</div>
+          <div class="relative w-40 h-40 mx-auto">
+            <svg viewBox="0 0 42 42" class="w-40 h-40 rotate-[-90deg] mx-auto block">
+              <circle cx="21" cy="21" r="15.915" fill="none" stroke="#1f2937" stroke-width="8"/>
+              <circle id="slice-high" cx="21" cy="21" r="15.915" fill="none" stroke="#ef4444" stroke-width="8" stroke-dasharray="0 100" stroke-linecap="round"/>
+              <circle id="slice-med"  cx="21" cy="21" r="15.915" fill="none" stroke="#f97316" stroke-width="8" stroke-dasharray="0 100" stroke-linecap="round"/>
+              <circle id="slice-low"  cx="21" cy="21" r="15.915" fill="none" stroke="#facc15" stroke-width="8" stroke-dasharray="0 100" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div class="mt-2 text-center text-sm">
+            <span class="text-red-400">High:</span> <span id="sevH">0</span>
+            <span class="mx-2 text-gray-500">•</span>
+            <span class="text-orange-400">Med:</span> <span id="sevM">0</span>
+            <span class="mx-2 text-gray-500">•</span>
+            <span class="text-yellow-300">Low:</span> <span id="sevL">0</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main -->
+    <main class="col-span-12 lg:col-span-9 grid gap-6">
+      <!-- Findings -->
+      <section class="glass rounded-2xl p-4">
+        <div class="flex flex-col md:flex-row md:items-center gap-3 justify-between">
+          <div>
+            <div class="text-lg font-semibold">Findings</div>
+            <div class="text-xs text-gray-400">Click a message → highlight code • Sort columns</div>
+          </div>
+          <div class="flex gap-2">
+            <input id="search" placeholder="Search findings…" class="w-64 bg-[#0b1224] border border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500" />
+            <select id="sevFilter" class="bg-[#0b1224] border border-white/10 rounded-lg px-3 py-2 text-sm">
+              <option value="">All severities</option>
+              <option>High</option><option>Medium</option><option>Low</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="overflow-auto mt-3">
+          <table id="tbl" class="min-w-full text-sm">
+            <thead>
+              <tr class="text-left border-b border-white/10">
+                <th class="p-2 cursor-pointer" data-sort="sev">Severity</th>
+                <th class="p-2 cursor-pointer" data-sort="type">Type</th>
+                <th class="p-2 cursor-pointer" data-sort="msg">Message</th>
+                <th class="p-2 cursor-pointer" data-sort="cwe">CWE</th>
+                <th class="p-2 cursor-pointer" data-sort="fn">Function</th>
+                <th class="p-2">Quick Fix</th>
+              </tr>
+            </thead>
+            <tbody id="tbody">
+<tr class="border-b border-white/10 hover:bg-white/5 row-enter" data-line="4" data-sev="High">
+  <td class="p-2"><span class="px-2 py-0.5 rounded sev-high">High</span></td>
+  <td class="p-2">Uninitialized Variable</td>
+  <td class="p-2 msg-link underline decoration-dotted cursor-pointer">Use of i may be uninitialized</td>
+  <td class="p-2">CWE-457</td>
+  <td class="p-2">f</td>
+  <td class="p-2"><span class='text-gray-500 text-xs'>—</span></td>
 </tr>
 
-<tr class='border-b border-gray-700 hover:bg-gray-800'>
-  <td class='p-2'><span class='px-2 py-0.5 rounded text-white bg-red-600'>High</span></td>
-  <td class='p-2'>Uninitialized Variable</td>
-  <td class='p-2'><a class='underline text-indigo-300 hover:text-indigo-100' href='#source'>Use of a[i], sum may be uninitialized</a></td>
-  <td class='p-2'>CWE-457</td>
-  <td class='p-2'>f</td>
-  <td class='p-2'><span class='text-gray-400'>—</span></td>
+<tr class="border-b border-white/10 hover:bg-white/5 row-enter" data-line="5" data-sev="High">
+  <td class="p-2"><span class="px-2 py-0.5 rounded sev-high">High</span></td>
+  <td class="p-2">Uninitialized Variable</td>
+  <td class="p-2 msg-link underline decoration-dotted cursor-pointer">Use of a[i], sum may be uninitialized</td>
+  <td class="p-2">CWE-457</td>
+  <td class="p-2">f</td>
+  <td class="p-2"><span class='text-gray-500 text-xs'>—</span></td>
 </tr>
 
-<tr class='border-b border-gray-700 hover:bg-gray-800'>
-  <td class='p-2'><span class='px-2 py-0.5 rounded text-white bg-red-600'>High</span></td>
-  <td class='p-2'>Uninitialized Variable</td>
-  <td class='p-2'><a class='underline text-indigo-300 hover:text-indigo-100' href='#source'>Use of p may be uninitialized</a></td>
-  <td class='p-2'>CWE-457</td>
-  <td class='p-2'>f</td>
-  <td class='p-2'><span class='text-gray-400'>—</span></td>
+<tr class="border-b border-white/10 hover:bg-white/5 row-enter" data-line="5" data-sev="High">
+  <td class="p-2"><span class="px-2 py-0.5 rounded sev-high">High</span></td>
+  <td class="p-2">Uninitialized Variable</td>
+  <td class="p-2 msg-link underline decoration-dotted cursor-pointer">Use of p may be uninitialized</td>
+  <td class="p-2">CWE-457</td>
+  <td class="p-2">f</td>
+  <td class="p-2"><span class='text-gray-500 text-xs'>—</span></td>
 </tr>
 
-<tr class='border-b border-gray-700 hover:bg-gray-800'>
-  <td class='p-2'><span class='px-2 py-0.5 rounded text-white bg-red-600'>High</span></td>
-  <td class='p-2'>Uninitialized Variable</td>
-  <td class='p-2'><a class='underline text-indigo-300 hover:text-indigo-100' href='#source'>Use of p, n may be uninitialized</a></td>
-  <td class='p-2'>CWE-457</td>
-  <td class='p-2'>f</td>
-  <td class='p-2'><span class='text-gray-400'>—</span></td>
+<tr class="border-b border-white/10 hover:bg-white/5 row-enter" data-line="4" data-sev="High">
+  <td class="p-2"><span class="px-2 py-0.5 rounded sev-high">High</span></td>
+  <td class="p-2">Uninitialized Variable</td>
+  <td class="p-2 msg-link underline decoration-dotted cursor-pointer">Use of p, n may be uninitialized</td>
+  <td class="p-2">CWE-457</td>
+  <td class="p-2">f</td>
+  <td class="p-2"><span class='text-gray-500 text-xs'>—</span></td>
 </tr>
 
-<tr class='border-b border-gray-700 hover:bg-gray-800'>
-  <td class='p-2'><span class='px-2 py-0.5 rounded text-white bg-red-600'>High</span></td>
-  <td class='p-2'>Uninitialized Variable</td>
-  <td class='p-2'><a class='underline text-indigo-300 hover:text-indigo-100' href='#source'>Use of src, argv[1] may be uninitialized</a></td>
-  <td class='p-2'>CWE-457</td>
-  <td class='p-2'>main</td>
-  <td class='p-2'><span class='text-gray-400'>—</span></td>
+<tr class="border-b border-white/10 hover:bg-white/5 row-enter" data-line="11" data-sev="High">
+  <td class="p-2"><span class="px-2 py-0.5 rounded sev-high">High</span></td>
+  <td class="p-2">Uninitialized Variable</td>
+  <td class="p-2 msg-link underline decoration-dotted cursor-pointer">Use of argv[1], src may be uninitialized</td>
+  <td class="p-2">CWE-457</td>
+  <td class="p-2">main</td>
+  <td class="p-2"><span class='text-gray-500 text-xs'>—</span></td>
 </tr>
 
-<tr class='border-b border-gray-700 hover:bg-gray-800'>
-  <td class='p-2'><span class='px-2 py-0.5 rounded text-white bg-red-600'>High</span></td>
-  <td class='p-2'>Uninitialized Variable</td>
-  <td class='p-2'><a class='underline text-indigo-300 hover:text-indigo-100' href='#source'>Use of src, dst, strcpy may be uninitialized</a></td>
-  <td class='p-2'>CWE-457</td>
-  <td class='p-2'>main</td>
-  <td class='p-2'><button class='px-2 py-1 rounded bg-emerald-600 text-white text-xs' data-fix='Use strncpy(dst, src, sizeof(dst)-1); dst[sizeof(dst)-1] = &#39;\0&#39;;' onclick='copyFix(this)'>Copy Fix</button></td>
+<tr class="border-b border-white/10 hover:bg-white/5 row-enter" data-line="12" data-sev="High">
+  <td class="p-2"><span class="px-2 py-0.5 rounded sev-high">High</span></td>
+  <td class="p-2">Uninitialized Variable</td>
+  <td class="p-2 msg-link underline decoration-dotted cursor-pointer">Use of dst, strcpy, src may be uninitialized</td>
+  <td class="p-2">CWE-457</td>
+  <td class="p-2">main</td>
+  <td class="p-2"><button class='btn text-xs copy-fix' data-fix='Use strncpy(dst, src, sizeof(dst)-1); dst[sizeof(dst)-1] = &#39; &#39;;'>Copy Fix</button></td>
 </tr>
 
-<tr class='border-b border-gray-700 hover:bg-gray-800'>
-  <td class='p-2'><span class='px-2 py-0.5 rounded text-white bg-red-600'>High</span></td>
-  <td class='p-2'>Unsafe Library Call</td>
-  <td class='p-2'><a class='underline text-indigo-300 hover:text-indigo-100' href='#L14'>Call to strcpy may cause overflow or command injection</a></td>
-  <td class='p-2'>CWE-120</td>
-  <td class='p-2'>main</td>
-  <td class='p-2'><button class='px-2 py-1 rounded bg-emerald-600 text-white text-xs' data-fix='Use strncpy(dst, src, sizeof(dst)-1); dst[sizeof(dst)-1] = &#39;\0&#39;;' onclick='copyFix(this)'>Copy Fix</button></td>
+<tr class="border-b border-white/10 hover:bg-white/5 row-enter" data-line="14" data-sev="High">
+  <td class="p-2"><span class="px-2 py-0.5 rounded sev-high">High</span></td>
+  <td class="p-2">Unsafe Library Call</td>
+  <td class="p-2 msg-link underline decoration-dotted cursor-pointer">Call to strcpy may cause overflow or command injection</td>
+  <td class="p-2">CWE-120</td>
+  <td class="p-2">main</td>
+  <td class="p-2"><button class='btn text-xs copy-fix' data-fix='Use strncpy(dst, src, sizeof(dst)-1); dst[sizeof(dst)-1] = &#39; &#39;;'>Copy Fix</button></td>
 </tr>
 
-<tr class='border-b border-gray-700 hover:bg-gray-800'>
-  <td class='p-2'><span class='px-2 py-0.5 rounded text-white bg-red-600'>High</span></td>
-  <td class='p-2'>Uninitialized Variable</td>
-  <td class='p-2'><a class='underline text-indigo-300 hover:text-indigo-100' href='#source'>Use of printf, dst, &#34;%s\n&#34; may be uninitialized</a></td>
-  <td class='p-2'>CWE-457</td>
-  <td class='p-2'>main</td>
-  <td class='p-2'><span class='text-gray-400'>—</span></td>
+<tr class="border-b border-white/10 hover:bg-white/5 row-enter" data-line="12" data-sev="High">
+  <td class="p-2"><span class="px-2 py-0.5 rounded sev-high">High</span></td>
+  <td class="p-2">Uninitialized Variable</td>
+  <td class="p-2 msg-link underline decoration-dotted cursor-pointer">Use of dst, printf, &#34;%s
+&#34; may be uninitialized</td>
+  <td class="p-2">CWE-457</td>
+  <td class="p-2">main</td>
+  <td class="p-2"><span class='text-gray-500 text-xs'>—</span></td>
 </tr>
 
-<tr class='border-b border-gray-700 hover:bg-gray-800'>
-  <td class='p-2'><span class='px-2 py-0.5 rounded text-white bg-red-600'>High</span></td>
-  <td class='p-2'>Uninitialized Variable</td>
-  <td class='p-2'><a class='underline text-indigo-300 hover:text-indigo-100' href='#source'>Use of type=&#39;int&#39;, name=ID, exprs=[BinaryOp, ], op=&#39;-&#39;, FuncCall, name=&#39;argc&#39;, left=ID, right=Constant, value=&#39;1&#39;, name=&#39;f&#39;, args=ExprList may be uninitialized</a></td>
-  <td class='p-2'>CWE-457</td>
-  <td class='p-2'>main</td>
-  <td class='p-2'><span class='text-gray-400'>—</span></td>
+<tr class="border-b border-white/10 hover:bg-white/5 row-enter" data-line="11" data-sev="High">
+  <td class="p-2"><span class="px-2 py-0.5 rounded sev-high">High</span></td>
+  <td class="p-2">Uninitialized Variable</td>
+  <td class="p-2 msg-link underline decoration-dotted cursor-pointer">Use of left=ID, FuncCall, name=ID, name=&#39;f&#39;, type=&#39;int&#39;, args=ExprList, ], op=&#39;-&#39;, right=Constant, name=&#39;argc&#39;, exprs=[BinaryOp, value=&#39;1&#39; may be uninitialized</td>
+  <td class="p-2">CWE-457</td>
+  <td class="p-2">main</td>
+  <td class="p-2"><span class='text-gray-500 text-xs'>—</span></td>
 </tr></tbody>
-        </table>
-      </div>
-    </section>
+          </table>
+        </div>
+      </section>
 
-    <!-- Function Summaries -->
-    
-    <section class='card rounded-2xl p-4 shadow'>
-      <h2 class='text-xl font-semibold mb-2'>Function Summaries</h2>
-      <div class='table-wrap'>
-        <table class='min-w-full text-sm'>
-          <thead>
-            <tr class='text-left border-b border-gray-700'>
-              <th class='p-2'>Function</th>
-              <th class='p-2'>Params required non-null</th>
-              <th class='p-2'>Taints return</th>
-              <th class='p-2'>May return 0</th>
-            </tr>
-          </thead>
-          <tbody>
-        <tr class='border-b border-gray-700'>
-          <td class='p-2 font-mono'>f</td>
-          <td class='p-2'>—</td>
-          <td class='p-2'>No</td>
-          <td class='p-2'>No</td>
-        </tr>
-        
-        <tr class='border-b border-gray-700'>
-          <td class='p-2 font-mono'>main</td>
-          <td class='p-2'>—</td>
-          <td class='p-2'>No</td>
-          <td class='p-2'>No</td>
-        </tr>
-        </tbody>
-        </table>
-      </div>
-    </section>
-    
+      <!-- CFG + Code (side-by-side) -->
+      <section class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <!-- CFG -->
+        <div class="glass rounded-2xl p-4">
+          <div class="flex items-center justify-between">
+            <div class="text-lg font-semibold">CFG (per function)</div>
+            <div class="flex gap-2" id="cfgTabs"></div>
+          </div>
+          <div class="mt-3 pane">
+            <div id="mmd-container" class="min-h-[280px] text-sm text-gray-400">No CFG available.</div>
+          </div>
+        </div>
 
-    <!-- CFG -->
-    <section class='card rounded-2xl p-4 shadow'>
-      <h2 class='text-xl font-semibold mb-2'>CFG (per function)</h2>
-      <div class='mb-3 flex flex-wrap items-center gap-2'><button type='button' onclick="showPanel('tab0',this)" class='tab-btn is-active'>f</button><button type='button' onclick="showPanel('tab1',this)" class='tab-btn '>main</button></div>
-      <div id='tab0' class='panel ' data-rendered='0'>  <script type='text/plain' class='mmd' id='mmd-tab0'>flowchart TD
-B1["B1"]
-B2["B2"]
-B3["B3"]
-B1 --> B2
-B1 --> B3
-B2 --> B3</script>  <div id='graph-tab0' class='p-2 rounded bg-white overflow-auto min-h-[120px]'></div>  <div class='mt-3'><div class='text-sm text-gray-300 mb-1'>CFG Details</div><div class='p-2 rounded bg-gray-900 mb-2'><div class='font-semibold text-sm mb-1'>B1</div><div class='text-xs text-gray-300'>1: loop (i &lt;= 10)</div></div><div class='p-2 rounded bg-gray-900 mb-2'><div class='font-semibold text-sm mb-1'>B2</div><div class='text-xs text-gray-300'>2: sum = a[i]</div></div><div class='p-2 rounded bg-gray-900 mb-2'><div class='font-semibold text-sm mb-1'>B3</div><div class='text-xs text-gray-300'>4: p = 0<br/>5: return *p + 100 / n</div></div></div></div><div id='tab1' class='panel hidden' data-rendered='0'>  <script type='text/plain' class='mmd' id='mmd-tab1'>flowchart TD
-B1["B1"]</script>  <div id='graph-tab1' class='p-2 rounded bg-white overflow-auto min-h-[120px]'></div>  <div class='mt-3'><div class='text-sm text-gray-300 mb-1'>CFG Details</div><div class='p-2 rounded bg-gray-900 mb-2'><div class='font-semibold text-sm mb-1'>B1</div><div class='text-xs text-gray-300'>6: src = argv[1]<br/>7: call strcpy(dst, src)<br/>8: call printf(&#34;%s\n&#34;, dst)<br/>9: return FuncCall(name=ID(name=&#39;f&#39;
-                 ),
-         args=ExprList(exprs=[BinaryOp(op=&#39;-&#39;,
-                                       left=ID(name=&#39;argc&#39;
-                                               ),
-                                       right=Constant(type=&#39;int&#39;,
-                                                      value=&#39;1&#39;
-                                                      )
-                                       )
-                             ]
-                       )
-         )</div></div></div></div>
-    </section>
-
-    <!-- Source -->
-    <section id='source' class='card rounded-2xl p-4 shadow'>
-      <h2 class='text-xl font-semibold mb-2'>Source</h2>
-      <div class='bg-black text-green-200 p-3 rounded overflow-auto text-xs sm:text-sm'>
-        <span id='L1' class='code-line block'><a class='line-no' href='#L1'>   1</a> </span>
-<span id='L2' class='code-line block'><a class='line-no' href='#L2'>   2</a> </span>
-<span id='L3' class='code-line block'><a class='line-no' href='#L3'>   3</a> </span>
-<span id='L4' class='code-line block'><a class='line-no' href='#L4'>   4</a> int f(int n){</span>
-<span id='L5' class='code-line block'><a class='line-no' href='#L5'>   5</a>   int a[10]; int i, sum;</span>
-<span id='L6' class='code-line block'><a class='line-no' href='#L6'>   6</a>   for(i=0;i&lt;=10;i++) sum += a[i];</span>
-<span id='L7' class='code-line block'><a class='line-no' href='#L7'>   7</a>   int *p = 0;</span>
-<span id='L8' class='code-line block'><a class='line-no' href='#L8'>   8</a>   return *p + (100/n);</span>
-<span id='L9' class='code-line block'><a class='line-no' href='#L9'>   9</a> }</span>
-<span id='L10' class='code-line block'><a class='line-no' href='#L10'>  10</a> </span>
-<span id='L11' class='code-line block'><a class='line-no' href='#L11'>  11</a> int main(int argc, char** argv){</span>
-<span id='L12' class='code-line block'><a class='line-no' href='#L12'>  12</a>   char dst[8];</span>
-<span id='L13' class='code-line block'><a class='line-no' href='#L13'>  13</a>   char *src = argv[1];</span>
-<span id='L14' class='code-line block'><a class='line-no' href='#L14'>  14</a>   <mark class='px-1 rounded bg-red-700 text-white'>strcpy</mark>(dst, src);</span>
-<span id='L15' class='code-line block'><a class='line-no' href='#L15'>  15</a>   printf(&#34;%s\n&#34;, dst);</span>
-<span id='L16' class='code-line block'><a class='line-no' href='#L16'>  16</a>   return f(argc-1);</span>
-<span id='L17' class='code-line block'><a class='line-no' href='#L17'>  17</a> }</span>
-      </div>
-    </section>
-
-    <footer class='text-gray-400 text-xs text-center'>Generated by SVD</footer>
+        <!-- Source -->
+        <div id="codeCard" class="glass rounded-2xl p-4">
+          <div class="text-lg font-semibold mb-2">Source</div>
+          <!-- IMPORTANT: keep <pre> empty: no spaces/newlines inside -->
+          <pre id="code" class="code rounded-xl overflow-auto"><div class='line' id='L1'><span class='ln'>   1</span><span class='lc'>#include &lt;stdio.h&gt;</span></div>
+<div class='line' id='L2'><span class='ln'>   2</span><span class='lc'>#include &lt;string.h&gt;</span></div>
+<div class='line' id='L3'><span class='ln'>   3</span><span class='lc'></span></div>
+<div class='line' id='L4'><span class='ln'>   4</span><span class='lc'>int f(int n){</span></div>
+<div class='line' id='L5'><span class='ln'>   5</span><span class='lc'>  int a[10]; int i, sum;  // sum uninitialized</span></div>
+<div class='line' id='L6'><span class='ln'>   6</span><span class='lc'>  for(i=0;i&lt;=10;i++) sum += a[i]; // OOB + uninit use</span></div>
+<div class='line' id='L7'><span class='ln'>   7</span><span class='lc'>  int *p = 0;</span></div>
+<div class='line' id='L8'><span class='ln'>   8</span><span class='lc'>  return *p + (100/n); // null deref + div by zero if n==0</span></div>
+<div class='line' id='L9'><span class='ln'>   9</span><span class='lc'>}</span></div>
+<div class='line' id='L10'><span class='ln'>  10</span><span class='lc'></span></div>
+<div class='line' id='L11'><span class='ln'>  11</span><span class='lc'>int main(int argc, char** argv){</span></div>
+<div class='line' id='L12'><span class='ln'>  12</span><span class='lc'>  char dst[8];</span></div>
+<div class='line' id='L13'><span class='ln'>  13</span><span class='lc'>  char *src = argv[1]; // taint source</span></div>
+<div class='line' id='L14'><span class='ln'>  14</span><span class='lc'>  <mark class='px-1 rounded bg-red-700 text-white'>strcpy</mark>(dst, src);    // potential overflow</span></div>
+<div class='line' id='L15'><span class='ln'>  15</span><span class='lc'>  <mark class='px-1 rounded bg-red-700 text-white'>printf</mark>(&#34;%s
+&#34;, dst);</span></div>
+<div class='line' id='L16'><span class='ln'>  16</span><span class='lc'>  return f(argc-1);</span></div>
+<div class='line' id='L17'><span class='ln'>  17</span><span class='lc'>}</span></div></pre>
+        </div>
+      </section>
+    </main>
   </div>
 
-  <!-- Payload for export -->
-  <script>
-    window.__SVD_PAYLOAD__ = {"file": "svd\\examples\\buggy.c", "metrics": {"loc": 17, "functions": 2, "cfg_nodes": 4, "cfg_edges": 3, "issues": 9, "analysis_ms": 0}, "findings": [{"function": "f", "severity": "High", "kind": "Uninitialized Variable", "message": "Use of i may be uninitialized", "cwe": "CWE-457", "evidence": {"sid": 1, "reads": ["i"]}}, {"function": "f", "severity": "High", "kind": "Uninitialized Variable", "message": "Use of a[i], sum may be uninitialized", "cwe": "CWE-457", "evidence": {"sid": 2, "reads": ["a[i]", "sum"]}}, {"function": "f", "severity": "High", "kind": "Uninitialized Variable", "message": "Use of p may be uninitialized", "cwe": "CWE-457", "evidence": {"sid": 4, "reads": ["p"]}}, {"function": "f", "severity": "High", "kind": "Uninitialized Variable", "message": "Use of p, n may be uninitialized", "cwe": "CWE-457", "evidence": {"sid": 5, "reads": ["p", "n"]}}, {"function": "main", "severity": "High", "kind": "Uninitialized Variable", "message": "Use of src, argv[1] may be uninitialized", "cwe": "CWE-457", "evidence": {"sid": 6, "reads": ["src", "argv[1]"]}}, {"function": "main", "severity": "High", "kind": "Uninitialized Variable", "message": "Use of src, dst, strcpy may be uninitialized", "cwe": "CWE-457", "evidence": {"sid": 7, "reads": ["src", "dst", "strcpy"], "fix": "Use strncpy(dst, src, sizeof(dst)-1); dst[sizeof(dst)-1] = '\\0';"}}, {"function": "main", "severity": "High", "kind": "Unsafe Library Call", "message": "Call to strcpy may cause overflow or command injection", "cwe": "CWE-120", "evidence": {"sid": 7, "call": "strcpy(dst, src)", "fix": "Use strncpy(dst, src, sizeof(dst)-1); dst[sizeof(dst)-1] = '\\0';"}}, {"function": "main", "severity": "High", "kind": "Uninitialized Variable", "message": "Use of printf, dst, \"%s\\n\" may be uninitialized", "cwe": "CWE-457", "evidence": {"sid": 8, "reads": ["printf", "dst", "\"%s\\n\""]}}, {"function": "main", "severity": "High", "kind": "Uninitialized Variable", "message": "Use of type='int', name=ID, exprs=[BinaryOp, ], op='-', FuncCall, name='argc', left=ID, right=Constant, value='1', name='f', args=ExprList may be uninitialized", "cwe": "CWE-457", "evidence": {"sid": 9, "reads": ["type='int'", "name=ID", "exprs=[BinaryOp", "]", "op='-'", "FuncCall", "name='argc'", "left=ID", "right=Constant", "value='1'", "name='f'", "args=ExprList"]}}]};
+  <!-- Toast -->
+  <div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 px-4 py-2 rounded-lg glass opacity-0 pointer-events-none transition">
+    <span id="toastText">Exported</span>
+  </div>
+
+  <!-- Mermaid (module) -->
+  <script type="module">
+    const mod = await import('https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs');
+    window.mermaidLib = mod.default;
+    window.mermaidLib.initialize({ startOnLoad: false, theme: 'dark' });
+    window.dispatchEvent(new CustomEvent('mermaid-ready'));
   </script>
 
-  <script type="module">
-    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
-    mermaid.initialize({ startOnLoad: false, theme: 'default' });
+  <!-- Main UI logic -->
+  <script>
+    /* progress + counters */
+    const prog = document.getElementById('prog');
+    setTimeout(()=>{ prog.style.width = '100%'; prog.style.transition='width 1.2s ease'; }, 150);
+    document.querySelectorAll('[data-counter]').forEach(el=>{
+      const target = +el.dataset.counter || 0; let cur = 0;
+      const step = Math.max(1, Math.ceil(target/40));
+      const tick = ()=>{ cur += step; if(cur>=target){ cur=target } el.textContent = cur; if(cur<target) requestAnimationFrame(tick); };
+      requestAnimationFrame(tick);
+    });
+    document.getElementById('btn-collapse').onclick = ()=> document.getElementById('sidebar').classList.toggle('collapsed');
 
-    async function renderMermaidInto(panelId) {
-      const panel = document.getElementById(panelId);
-      if (!panel || panel.dataset.rendered === '1') return;
-      const mmd = panel.querySelector('script.mmd');
-      const target = panel.querySelector('#graph-' + panelId);
-      if (!mmd || !target) return;
-      const def = mmd.textContent || mmd.innerText || "";
-      try {
-        const { svg } = await mermaid.render('svg-' + panelId, def);
-        target.innerHTML = svg;
-        panel.dataset.rendered = '1';
-      } catch (e) {
-        target.innerHTML = "<div style='padding:.5rem;color:#b91c1c;'>Mermaid render error: " + (e?.message || e) + "</div>";
-      }
+    /* findings: search/filter/sort */
+    const tbody = document.getElementById('tbody');
+    const search = document.getElementById('search');
+    const sevF = document.getElementById('sevFilter');
+    function applyFilter(){
+      const q = (search.value||'').toLowerCase(); const s = sevF.value;
+      Array.from(tbody.children).forEach(r=>{
+        const hit = r.textContent.toLowerCase().includes(q);
+        const sev = r.dataset.sev;
+        r.style.display = (hit && (!s || s===sev)) ? '' : 'none';
+      });
+      computeSeverity();
     }
+    search.oninput = applyFilter; sevF.onchange = applyFilter;
+    document.querySelectorAll('th[data-sort]').forEach(th=>{
+      th.addEventListener('click', ()=>{
+        const idx = Array.from(th.parentNode.children).indexOf(th);
+        const asc = th.dataset.asc !== 'true'; th.dataset.asc = asc;
+        const filtered = Array.from(tbody.children).filter(r=>r.style.display!=='none');
+        filtered.sort((a,b)=>{
+          const A=a.children[idx].innerText.trim(), B=b.children[idx].innerText.trim();
+          return asc ? A.localeCompare(B) : B.localeCompare(A);
+        });
+        filtered.forEach(r=>tbody.appendChild(r));
+      });
+    });
 
-    window.showPanel = (id, btn) => {
-      document.querySelectorAll('.panel').forEach(p => p.classList.add('hidden'));
-      const el = document.getElementById(id);
-      el.classList.remove('hidden');
-      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('is-active'));
-      if (btn) btn.classList.add('is-active');
-      renderMermaidInto(id);
+    /* click → jump to code line */
+    const code = document.getElementById('code');
+    function jumpToLine(line){
+      code.querySelectorAll('.line').forEach(l=>l.classList.remove('hl'));
+      const tgt = document.getElementById('L'+line) || code.querySelectorAll('.line')[line-1];
+      if(tgt){ tgt.classList.add('hl'); tgt.scrollIntoView({behavior:'smooth', block:'center'}); }
     }
+    tbody.addEventListener('click', e=>{
+      const msgCell = e.target.closest('.msg-link') || e.target.closest('tr');
+      if(!msgCell) return;
+      const tr = msgCell.closest('tr'); const line = +tr.dataset.line || 1;
+      jumpToLine(line);
+    });
 
-    window.copyFix = (btn) => {
-      const txt = btn?.dataset?.fix;
-      if (!txt || txt === 'None') return;
-      navigator.clipboard.writeText(txt).then(() => {
-        btn.textContent = 'Copied!';
-        setTimeout(() => (btn.textContent = 'Copy Fix'), 1200);
+    /* copy fix */
+    function bindCopyButtons(){
+      tbody.querySelectorAll('.copy-fix').forEach(btn=>{
+        btn.onclick = ()=>{
+          const txt = btn.dataset.fix || '';
+          if(!txt) return;
+          navigator.clipboard.writeText(txt).then(()=>{
+            const prev = btn.textContent; btn.textContent = 'Copied!';
+            setTimeout(()=> btn.textContent = prev, 1200);
+          });
+        }
       });
     }
+    bindCopyButtons();
 
-    // Export buttons: server mode (POST) or file:// fallback
-    const payload = window.__SVD_PAYLOAD__;
-    const btnJson = document.getElementById('btn-json');
-    const btnPdf  = document.getElementById('btn-pdf');
+    /* severity donut */
+    function computeSeverity(){
+      const visible = Array.from(tbody.children).filter(r=>r.style.display!=='none');
+      let hi=0, me=0, lo=0;
+      visible.forEach(r=>{ const s=r.dataset.sev; if(s==='High') hi++; else if(s==='Medium') me++; else if(s==='Low') lo++; });
+      const total = Math.max(1, hi+me+lo);
+      const toDash = v => `${(v/total*100).toFixed(2)} ${100-(v/total*100).toFixed(2)}`;
+      const H = document.getElementById('slice-high'); const M=document.getElementById('slice-med'); const L=document.getElementById('slice-low');
+      H.setAttribute('stroke-dasharray', toDash(hi));
+      M.setAttribute('stroke-dasharray', toDash(me));
+      L.setAttribute('stroke-dasharray', toDash(lo));
+      M.setAttribute('transform', `rotate(${(hi/total)*360} 21 21)`);
+      L.setAttribute('transform', `rotate(${((hi+me)/total)*360} 21 21)`);
+      document.getElementById('sevH').textContent = hi;
+      document.getElementById('sevM').textContent = me;
+      document.getElementById('sevL').textContent = lo;
+    }
+    computeSeverity();
 
-    btnJson.addEventListener('click', () => {
-      if (location.protocol === 'file:') {
-        const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = 'svd-report.json';
-        a.click();
-        URL.revokeObjectURL(a.href);
-      } else {
-        const f = document.getElementById('export-json-form');
-        f.elements['data'].value = JSON.stringify(payload);
-        f.submit();
+    /* exports */
+    const toast = (txt)=>{ const t=document.getElementById('toast'); document.getElementById('toastText').textContent = txt; t.style.opacity=1; setTimeout(()=> t.style.opacity=0, 1200); };
+    document.getElementById('btn-export-json').onclick=()=>{
+      const data = Array.from(tbody.children).map(tr=>({
+        line: +tr.dataset.line||null,
+        severity: tr.children[0].innerText.trim(),
+        type: tr.children[1].innerText.trim(),
+        message: tr.children[2].innerText.trim(),
+        cwe: tr.children[3].innerText.trim(),
+        function: tr.children[4].innerText.trim(),
+      }));
+      const blob = new Blob([JSON.stringify({findings:data},null,2)], {type:'application/json'});
+      const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='svd-report.json'; a.click(); URL.revokeObjectURL(a.href);
+      toast('JSON exported');
+    };
+    document.getElementById('btn-export-pdf').onclick=()=>{ window.print(); toast('Open Print → Save as PDF'); };
+
+    /* ---------------- Mermaid CFG (multi-function tabs) ---------------- */
+
+    // Read cfg-mermaid JSON safely (handles order-of-insert, SPA-like reloads)
+    function tryReadCfgArray(){
+      const el = document.getElementById('cfg-mermaid');
+      if(!el) return null;                   // not injected yet
+      let raw = el.textContent || '';
+      raw = raw.replace(/\u0000/g,'').trim();
+      try { return JSON.parse(raw || '[]'); } catch { return []; }
+    }
+
+    const tabs = document.getElementById('cfgTabs');
+    const container = document.getElementById('mmd-container');
+
+    const sanitizeDiagram = (txt='')=>{
+      const cleaned = String(txt).replace(/\r/g,'').replace(/`/g,"'");
+      const init = "%%{init: {'theme':'dark'}}%%\n";
+      return cleaned.startsWith('%%{init:') ? cleaned : (init + cleaned);
+    };
+
+    async function renderMermaid(diagramText, key='mmd0'){
+      if(!window.mermaidLib) return;
+      const diagram = sanitizeDiagram(diagramText||'');
+      try{
+        const { svg } = await window.mermaidLib.render(key, diagram);
+        container.innerHTML = svg;
+      }catch(e){
+        container.innerHTML = `<div class="text-red-400 text-sm">Mermaid render error: ${String(e).slice(0,200)}</div>
+          <pre class="text-xs text-gray-300 mt-2 whitespace-pre-wrap">${diagram.replace(/</g,'&lt;')}</pre>`;
       }
-    });
+    }
 
-    btnPdf.addEventListener('click', () => {
-      if (location.protocol === 'file:') {
-        // Simple and reliable: use browser "Print to PDF"
-        window.print();
-      } else {
-        const f = document.getElementById('export-pdf-form');
-        f.elements['data'].value = JSON.stringify(payload);
-        f.submit();
+    function buildTabsFrom(cfgArr){
+      tabs.innerHTML = '';
+      if(!cfgArr || !cfgArr.length){
+        container.textContent = 'No CFG available.';
+        return;
       }
-    });
+      cfgArr.forEach((cfg,i)=>{
+        const b=document.createElement('button');
+        b.className='tab'+(i===0?' active':'');
+        b.textContent = cfg.name || ('fun'+i);
+        b.onclick = ()=>{
+          tabs.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+          b.classList.add('active');
+          renderMermaid(cfg.diagram, 'mmd'+i);
+        };
+        tabs.appendChild(b);
+      });
+      renderMermaid(cfgArr[0].diagram, 'mmd0');
+    }
 
-    // Render first CFG on page load
-    window.addEventListener('DOMContentLoaded', () => {
-      const first = document.querySelector('.panel:not(.hidden)');
-      if (first) renderMermaidInto(first.id);
-    });
+    function initCFG(){
+      const data = tryReadCfgArray();
+      if(data === null) return false; // not injected yet
+      buildTabsFrom(data);
+      return true;
+    }
+
+    // Try when Mermaid is ready; if cfg isn't there yet, observe DOM for injection
+    function bootWhenReady(){
+      if (initCFG()) return;
+      // Watch for the cfg-mermaid script to arrive
+      const obs = new MutationObserver((_muts, observer)=>{
+        const ok = initCFG();
+        if(ok) observer.disconnect();
+      });
+      obs.observe(document.body || document.documentElement, {childList:true, subtree:true});
+    }
+
+    if (window.mermaidLib) {
+      // DOMContentLoaded ensures #mmd-container exists
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', bootWhenReady, {once:true});
+      } else {
+        bootWhenReady();
+      }
+    } else {
+      window.addEventListener('mermaid-ready', ()=>{
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', bootWhenReady, {once:true});
+        } else {
+          bootWhenReady();
+        }
+      }, {once:true});
+    }
   </script>
+
+  <!-- Python injects at the very end:
+       <script id="cfg-mermaid" type="application/json">[
+          {"name":"f","diagram":"flowchart TD\n..."}, {"name":"main","diagram":"flowchart TD\n..."}
+       ]</script>
+       and fills #code with lines like:
+       <div id="L12" class="line"><span class="ln">12</span><span class="lc">char dst[8];</span></div>
+  -->
+<script id="cfg-mermaid" type="application/json">[{"name": "f", "diagram": "flowchart TD\nB1[\"B1\"]\nB2[\"B2\"]\nB3[\"B3\"]\nB1 --> B2\nB1 --> B3\nB2 --> B3"}, {"name": "main", "diagram": "flowchart TD\nB1[\"B1\"]"}]</script>
 </body>
 </html>
